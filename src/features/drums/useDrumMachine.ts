@@ -23,6 +23,7 @@ const SAMPLE_FILES: Record<DrumKind, Record<SampleLevel, string>> = {
 }
 
 const SAMPLE_BASE_URL = `${import.meta.env.BASE_URL}audio/drums/avl-black-pearl/`
+const METRONOME_FILES = {tick:'sidestick-soft.wav',accent:'sidestick-hard.wav'} as const
 
 function createAudioContext() {
   const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
@@ -57,6 +58,7 @@ export function useDrumMachine() {
       const entries = Object.entries(SAMPLE_FILES).flatMap(([kind, levels]) =>
         Object.entries(levels).map(([level, file]) => [`${kind}-${level}`, file] as const),
       )
+      entries.push(...Object.entries(METRONOME_FILES).map(([key,file])=>[`metronome-${key}`,file] as const))
       await Promise.all(entries.map(async ([key, file]) => {
         try {
           const response = await fetch(`${SAMPLE_BASE_URL}${file}`, {signal:controller.signal})
@@ -78,7 +80,7 @@ export function useDrumMachine() {
   }, [])
 
   const decodeSamples = useCallback((context: AudioContext) => {
-    if (samplesDecodingRef.current || sampleBuffersRef.current.size === Object.keys(SAMPLE_FILES).length * 3) return
+    if (samplesDecodingRef.current || sampleBuffersRef.current.size === Object.keys(SAMPLE_FILES).length * 3 + Object.keys(METRONOME_FILES).length) return
     samplesDecodingRef.current = true
     void Promise.all([...sampleDataRef.current.entries()].map(async ([key, data]) => {
       try {
@@ -163,16 +165,35 @@ export function useDrumMachine() {
 
   const playMetronomeClick = useCallback((accent: boolean) => {
     const context = getAudioContext()
-    const oscillator = context.createOscillator()
-    const gain = context.createGain()
     const now = context.currentTime
-    oscillator.type = 'square'
-    oscillator.frequency.value = accent ? 1760 : 1120
-    gain.gain.setValueAtTime(accent ? 0.22 : 0.12, now)
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.045)
-    oscillator.connect(gain).connect(context.destination)
-    oscillator.start(now)
-    oscillator.stop(now + 0.05)
+    const sample = sampleBuffersRef.current.get(`metronome-${accent?'accent':'tick'}`)
+    if(sample){
+      const source=context.createBufferSource()
+      const filter=context.createBiquadFilter()
+      const gain=context.createGain()
+      source.buffer=sample
+      filter.type='bandpass'
+      filter.frequency.value=accent?1450:1850
+      filter.Q.value=.7
+      gain.gain.value=accent?.38:.25
+      source.connect(filter).connect(gain).connect(context.destination)
+      source.start(now)
+      return
+    }
+    const length=.035
+    const buffer=context.createBuffer(1,Math.ceil(context.sampleRate*length),context.sampleRate)
+    const data=buffer.getChannelData(0)
+    for(let index=0;index<data.length;index+=1)data[index]=(Math.random()*2-1)*Math.exp(-index/(data.length*.16))
+    const source=context.createBufferSource()
+    const filter=context.createBiquadFilter()
+    const gain=context.createGain()
+    source.buffer=buffer
+    filter.type='bandpass'
+    filter.frequency.value=accent?1500:2050
+    filter.Q.value=1.5
+    gain.gain.value=accent?.32:.2
+    source.connect(filter).connect(gain).connect(context.destination)
+    source.start(now)
   }, [getAudioContext])
 
   useEffect(() => {

@@ -1,4 +1,4 @@
-import type { CSSProperties } from 'react'
+import { useState, type CSSProperties } from 'react'
 import { Play, Square } from 'lucide-react'
 
 export type DrumVoice='kick'|'snare'|'hat'|'openHat'|'crash'|'ride'
@@ -12,11 +12,20 @@ const PRESETS:Record<string,DrumPattern>={
 }
 
 export function DrumMachine({bpm,drumPlaying,drumStep,metronomePlaying,metronomeBeat,pattern,onBpmChange,onDrumPlayingChange,onMetronomePlayingChange,onPatternChange}:Props){
+  const [tool,setTool]=useState<'metronome'|'drums'>('metronome')
+  const selectTool=(next:'metronome'|'drums')=>{
+    if(next==='metronome'&&drumPlaying) onDrumPlayingChange(false)
+    if(next==='drums'&&metronomePlaying) onMetronomePlayingChange(false)
+    setTool(next)
+  }
   return <section className="drum-machine">
+    <div className="rhythm-tool-switch"><button className={tool==='metronome'?'active':''} onClick={()=>selectTool('metronome')}><span>基础节拍</span><strong>传统节拍器</strong></button><button className={tool==='drums'?'active':''} onClick={()=>selectTool('drums')}><span>伴奏律动</span><strong>节奏鼓机</strong></button></div>
+    {tool==='drums'&&<>
     <div className="drum-head"><div><span>GUITAR PRACTICE GROOVE</span><h2>16 步节奏编排</h2><p>点击格子编辑节奏，用稳定的四分音符与十六分律动练习扫弦、节拍和即兴。</p></div><div className="drum-transport"><button onClick={()=>onBpmChange(Math.max(40,bpm-5))}>−</button><strong>{bpm}<small>BPM</small></strong><button onClick={()=>onBpmChange(Math.min(240,bpm+5))}>+</button><button className={drumPlaying?'stop':'start'} onClick={()=>onDrumPlayingChange(!drumPlaying)}>{drumPlaying?<><Square size={14}/> 停止</>:<><Play size={15}/> 播放</>}</button></div></div>
-    <div className="metronome-card"><div className={`metronome-body ${metronomePlaying?'swinging':''}`} style={{'--swing-duration':`${60/bpm}s`} as CSSProperties}><i/><b/><em/></div><div><span>TRADITIONAL METRONOME</span><h3>传统节拍器 · {bpm} BPM</h3><p>每小节第一拍为重音；摆锤左右各一次正好是一拍。</p><div className="metro-beats">{[0,1,2,3].map((beat)=><i key={beat} className={metronomePlaying&&metronomeBeat===beat?'active':''}>{beat+1}</i>)}</div></div><button className={metronomePlaying?'metro-stop':'metro-start'} onClick={()=>onMetronomePlayingChange(!metronomePlaying)}>{metronomePlaying?<><Square size={14}/> 停止</>:<><Play size={15}/> 开始节拍</>}</button></div>
     <div className="drum-presets"><span>快速节奏</span>{Object.entries(PRESETS).map(([name,preset])=><button key={name} onClick={()=>onPatternChange(preset)}>{name}</button>)}</div>
     <div className="drum-grid">{(['kick','snare','hat','openHat','crash','ride'] as const).map((row)=><div className="drum-row" key={row}><strong>{{kick:'底鼓',snare:'军鼓',hat:'闭镲',openHat:'开镲',crash:'吊镲',ride:'叮叮镲'}[row]}</strong>{pattern[row].map((on,index)=><button key={index} aria-label={`${row} 第 ${index+1} 步`} className={`${on?'on':''} ${drumStep===index?'playing':''} ${index%4===0?'beat':''}`} onClick={()=>onPatternChange({...pattern,[row]:pattern[row].map((value,step)=>step===index?!value:value)})}>{index%4===0?index/4+1:''}</button>)}</div>)}</div>
+    </>}
+    {tool==='metronome'&&<div className="metronome-card metronome-standalone"><div className={`metronome-body ${metronomePlaying?'swinging':''}`} style={{'--swing-duration':`${60/bpm}s`} as CSSProperties}><i/><b/><em/></div><div><span>TRADITIONAL METRONOME</span><h3>传统节拍器 · {bpm} BPM</h3><p>每小节第一拍为重音；摆锤左右各一次正好是一拍。</p><div className="metro-beats">{[0,1,2,3].map((beat)=><i key={beat} className={metronomePlaying&&metronomeBeat===beat?'active':''}>{beat+1}</i>)}</div><div className="metro-tempo"><button onClick={()=>onBpmChange(Math.max(40,bpm-5))}>−</button><strong>{bpm}<small>BPM</small></strong><button onClick={()=>onBpmChange(Math.min(240,bpm+5))}>+</button></div></div><button className={metronomePlaying?'metro-stop':'metro-start'} onClick={()=>onMetronomePlayingChange(!metronomePlaying)}>{metronomePlaying?<><Square size={14}/> 停止</>:<><Play size={15}/> 开始节拍</>}</button></div>}
     <div className="drum-tip"><strong>练琴建议</strong><span>从 70 BPM 开始，每次连续稳定演奏 4 小节后再提升 5 BPM。可保持本页播放鼓机，同时切到录音机录下练习。</span></div>
   </section>
 }

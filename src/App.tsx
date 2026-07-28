@@ -161,6 +161,7 @@ function App() {
   const [dailyStep,setDailyStep]=useState<number|null>(null)
   const [assessmentStep,setAssessmentStep]=useState<number|null>(null)
   const [assessmentResult,setAssessmentResult]=useState<StageResult[]|null>(null)
+  const [assessmentFretRange,setAssessmentFretRange]=useState<{min:number;max:number}|null>(null)
   const {bpm:drumBpm,setBpm:setDrumBpm,drumPlaying,setDrumPlaying,metronomePlaying,setMetronomePlaying,metronomeBeat,drumStep,pattern:drumPattern,setPattern:setDrumPattern,playMetronomeClick}=useDrumMachine()
   const [learningView, setLearningView] = useState<LearningView>('explore')
   const [cagedShape, setCagedShape] = useState<keyof typeof CAGED_SHAPES>('C')
@@ -237,6 +238,9 @@ function App() {
   const correctRef=useRef(0),attemptsRef=useRef(0),scoreRef=useRef(0)
   const stageStartCountsRef=useRef({correct:0,attempts:0})
   const programResultsRef=useRef<StageResult[]>([])
+  const stagePerformanceRef=useRef({masteryTotal:0,completed:0,slowCorrect:0,timeouts:0,wrongClicks:0,responseTotalMs:0})
+  const questionWrongRef=useRef(0),questionActiveRef=useRef(false)
+  const questionPositionRef=useRef(questionPosition)
   const practiceProfileRef=useRef(practiceProfile),positionStatsRef=useRef(positionStats)
   const answerRef = useRef<(note: string) => void>(() => {})
   const playbackContextRef = useRef<AudioContext | null>(null)
@@ -265,6 +269,7 @@ function App() {
   useEffect(()=>{correctRef.current=correct;attemptsRef.current=attempts;scoreRef.current=score},[attempts,correct,score])
   useEffect(()=>{practiceProfileRef.current=practiceProfile;saveJson(PRACTICE_PROFILE_KEY,practiceProfile)},[practiceProfile])
   useEffect(()=>{positionStatsRef.current=positionStats},[positionStats])
+  useEffect(()=>{questionPositionRef.current=questionPosition},[questionPosition])
 
   const nextTarget = useCallback((current?: string) => {
     const pool = availableNotes.filter((note) => note !== current)
@@ -276,8 +281,12 @@ function App() {
     const enabled = activeStrings.map((on, index) => on ? index : -1).filter((index) => index >= 0)
     const string = enabled[Math.floor(Math.random() * enabled.length)] ?? 0
     const fret = minFret + Math.floor(Math.random() * (maxFret - minFret + 1))
-    setFoundPositions([]); setArpeggioStep(0); questionStartedRef.current = Date.now()
-    if (trainingType === 'adaptive') {
+    setFoundPositions([]); setArpeggioStep(0); questionStartedRef.current = Date.now();questionWrongRef.current=0;questionActiveRef.current=true
+    if (trainingType === 'positionAssessment') {
+      const ranges=[{min:1,max:4},{min:5,max:8},{min:9,max:12}],range=ranges[Math.floor(Math.random()*ranges.length)]
+      const assessmentFret=range.min+Math.floor(Math.random()*(range.max-range.min+1))
+      setAssessmentFretRange(range);setQuestionPosition({string,fret:assessmentFret});setTarget(noteAt(string,assessmentFret))
+    } else if (trainingType === 'adaptive') {
       const positions = enabled.flatMap((s)=>Array.from({length:maxFret-minFret+1},(_,i)=>({string:s,fret:minFret+i})))
       const weighted = positions.map((position)=>{ const stat=positionStats[`${position.string}-${position.fret}`]; const total=(stat?.correct||0)+(stat?.wrong||0); const error=total?(stat?.wrong||0)/total:.45; const slow=Math.min(1,(stat?.averageMs||2500)/6000); const stale=Math.min(1,(Date.now()-(stat?.lastSeen||0))/(1000*60*60*24*7)); return {position,weight:1+error*5+slow*2+stale} })
       const totalWeight=weighted.reduce((sum,item)=>sum+item.weight,0); let roll=Math.random()*totalWeight; const selected=weighted.find((item)=>(roll-=item.weight)<=0)?.position||{string,fret}
@@ -433,16 +442,53 @@ function App() {
     setAssessmentResult(null);setDailyStep(null);setAssessmentStep(0);setAppMode('training');setStatus('idle')
   }
 
+  const skipAssessment = () => {
+    setPracticeProfile((profile)=>({...profile,assessmentCompleted:true}));setAssessmentResult(null);setAssessmentStep(null);setLearningView('explore');setAppMode('learning');setStatus('idle')
+  }
+
+
   const exitDailyPractice = () => {
     setDailyStep(null); setStatus('idle'); setAppMode('daily'); setFocusTraining(false)
     if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined)
   }
 
+  const exitAssessment = () => {
+    setAssessmentStep(null);setAssessmentResult(null);setAssessmentFretRange(null);setStatus('idle');setAppMode('assessment');setFocusTraining(false);programResultsRef.current=[]
+    if(document.fullscreenElement)void document.exitFullscreen().catch(()=>undefined)
+  }
+
   const captureProgramStage = useCallback((type:TrainingType) => {
+    const shownFor=Date.now()-questionStartedRef.current,minOpportunity=type==='earLocate'?4000:2000
+    if(questionActiveRef.current&&shownFor>=minOpportunity){stagePerformanceRef.current.completed+=1;stagePerformanceRef.current.timeouts+=1;questionActiveRef.current=false
+      if(['identify','positionAssessment','earLocate','octave','interval','intervalShape','adaptive','scaleDegree','chordTone'].includes(type)){const position=questionPositionRef.current,key=`${position.string}-${position.fret}`
+        setPositionStats((all)=>{const previous=all[key]||{correct:0,wrong:0};return {...all,[key]:{...previous,wrong:previous.wrong+1,timeouts:(previous.timeouts||0)+1,mastery:Math.round((previous.mastery??50)*.75),lastSeen:Date.now()}}})}
+    }
+    questionActiveRef.current=false
     const correctCount=Math.max(0,correctRef.current-stageStartCountsRef.current.correct),attemptCount=Math.max(0,attemptsRef.current-stageStartCountsRef.current.attempts)
-    const result:StageResult={type,correct:correctCount,attempts:attemptCount,accuracy:attemptCount?Math.round(correctCount/attemptCount*100):0}
+    const performance=stagePerformanceRef.current
+    const result:StageResult={type,correct:correctCount,attempts:attemptCount,accuracy:attemptCount?Math.round(correctCount/attemptCount*100):0,mastery:performance.completed?Math.round(performance.masteryTotal/performance.completed):0,slowCorrect:performance.slowCorrect,timeouts:performance.timeouts,wrongClicks:performance.wrongClicks,averageResponseMs:correctCount?Math.round(performance.responseTotalMs/correctCount):undefined}
     programResultsRef.current.push(result);stageStartCountsRef.current={correct:correctRef.current,attempts:attemptsRef.current};return result
   },[])
+
+  const currentQuestionMastery = (isCorrect:boolean) => {
+    if(!isCorrect)return 0
+    const elapsed=Date.now()-questionStartedRef.current,wrong=questionWrongRef.current,fastLimit=trainingType==='earLocate'?4500:2500,slowLimit=trainingType==='earLocate'?8000:5500
+    if(wrong>=2)return 20
+    if(wrong===1)return 45
+    if(elapsed<=fastLimit)return 100
+    if(elapsed<=slowLimit)return 72
+    return 40
+  }
+
+  const recordQuestionPerformance = (isCorrect:boolean) => {
+    if(dailyStep===null&&assessmentStep===null)return currentQuestionMastery(isCorrect)
+    if(!isCorrect){questionWrongRef.current+=1;stagePerformanceRef.current.wrongClicks+=1;return 0}
+    const elapsed=Date.now()-questionStartedRef.current,mastery=currentQuestionMastery(true),slowLimit=trainingType==='earLocate'?8000:5500
+    stagePerformanceRef.current.masteryTotal+=mastery;stagePerformanceRef.current.completed+=1;stagePerformanceRef.current.responseTotalMs+=elapsed
+    if(elapsed>slowLimit)stagePerformanceRef.current.slowCorrect+=1
+    questionActiveRef.current=false
+    return mastery
+  }
 
   const enterFocusTraining = () => {
     setFocusTraining(true)
@@ -476,23 +522,31 @@ function App() {
     const stage=practiceProfile.dailyPlan[dailyStep]
     if (trainingType !== stage.type) { setTrainingType(stage.type); return }
     stageStartCountsRef.current={correct:correctRef.current,attempts:attemptsRef.current}
+    stagePerformanceRef.current={masteryTotal:0,completed:0,slowCorrect:0,timeouts:0,wrongClicks:0,responseTotalMs:0}
     setTimeLeft(Math.round(stage.minutes*60)); setFeedback(null); setFoundPositions([]); prepareQuestion(); setStatus('playing')
   }, [appMode,dailyStep,practiceProfile.dailyPlan,prepareQuestion,status,trainingType])
 
   useEffect(()=>{
     if(assessmentStep===null||appMode!=='training'||status!=='idle')return
+    if(assessmentStep>=ASSESSMENT_STAGES.length){setAssessmentStep(0);return}
     const stage=ASSESSMENT_STAGES[assessmentStep]
     if(trainingType!==stage.type){setTrainingType(stage.type);return}
+    if(stage.type!=='positionAssessment')setAssessmentFretRange(null)
     stageStartCountsRef.current={correct:correctRef.current,attempts:attemptsRef.current}
-    setTimeLeft(60);setFeedback(null);setFoundPositions([]);prepareQuestion();setStatus('playing')
+    stagePerformanceRef.current={masteryTotal:0,completed:0,slowCorrect:0,timeouts:0,wrongClicks:0,responseTotalMs:0}
+    setTimeLeft(Math.round(stage.minutes*60));setFeedback(null);setFoundPositions([]);prepareQuestion();setStatus('playing')
   },[appMode,assessmentStep,prepareQuestion,status,trainingType])
+
+  useEffect(()=>{
+    if(dailyStep!==null&&dailyStep>=practiceProfile.dailyPlan.length){setDailyStep(practiceProfile.dailyPlan.length?0:null);setStatus('idle')}
+  },[dailyStep,practiceProfile.dailyPlan.length])
 
   useEffect(() => {
     if (status !== 'playing') return
     timerRef.current = window.setInterval(() => {
       setTimeLeft((time) => {
         if (time <= 1) {
-          if(assessmentStep!==null){captureProgramStage(ASSESSMENT_STAGES[assessmentStep].type);if(assessmentStep<ASSESSMENT_STAGES.length-1){setStatus('idle');setAssessmentStep((step)=>step===null?null:step+1);return 60}const stages=[...programResultsRef.current],session:PracticeSession={kind:'assessment',completedAt:Date.now(),score:scoreRef.current,accuracy:Math.round(stages.reduce((sum,item)=>sum+item.correct,0)/Math.max(1,stages.reduce((sum,item)=>sum+item.attempts,0))*100),stages};const updated=updatePracticeProfile(practiceProfileRef.current,session,positionStatsRef.current);setPracticeProfile(updated);setAssessmentResult(stages);setAssessmentStep(null);setAppMode('assessment');setStatus('finished');return 0}
+          if(assessmentStep!==null){captureProgramStage(ASSESSMENT_STAGES[assessmentStep].type);if(assessmentStep<ASSESSMENT_STAGES.length-1){const nextStep=assessmentStep+1;setStatus('idle');setAssessmentStep(nextStep);return Math.round(ASSESSMENT_STAGES[nextStep].minutes*60)}const stages=[...programResultsRef.current],session:PracticeSession={kind:'assessment',completedAt:Date.now(),score:scoreRef.current,accuracy:Math.round(stages.reduce((sum,item)=>sum+item.correct,0)/Math.max(1,stages.reduce((sum,item)=>sum+item.attempts,0))*100),stages};const updated=updatePracticeProfile(practiceProfileRef.current,session,positionStatsRef.current);setPracticeProfile(updated);setAssessmentResult(stages);setAssessmentStep(null);setAssessmentFretRange(null);setAppMode('assessment');setStatus('finished');return 0}
           if (dailyStep !== null) {const plan=practiceProfileRef.current.dailyPlan;captureProgramStage(plan[dailyStep].type);if(dailyStep < plan.length-1){setStatus('idle');setDailyStep((step)=>step===null?null:step+1);return Math.round(plan[dailyStep+1].minutes*60)}const stages=[...programResultsRef.current],session:PracticeSession={kind:'daily',completedAt:Date.now(),score:scoreRef.current,accuracy:Math.round(stages.reduce((sum,item)=>sum+item.correct,0)/Math.max(1,stages.reduce((sum,item)=>sum+item.attempts,0))*100),stages};setPracticeProfile((profile)=>updatePracticeProfile(profile,session,positionStatsRef.current));setStatus('finished');return 0}
           setStatus('finished'); return 0
         }
@@ -511,6 +565,7 @@ function App() {
       return
     }
     if (status !== 'playing' || !activeStrings[string]) return
+    if(trainingType==='positionAssessment'&&assessmentFretRange&&(fret<assessmentFretRange.min||fret>assessmentFretRange.max))return
     if (trainingType === 'identify') return
     const chosen = noteAt(string, fret)
     const clickedKey = `${string}-${fret}`
@@ -536,10 +591,12 @@ function App() {
       ? clickedMidi - anchorMidi === targetInterval && (trainingType !== 'intervalShape' || string === targetString)
       : chosen === target && (!['stringLocate','adaptive','scaleDegree','chordTone'].includes(trainingType) || string === targetString)
     const positionKey = `${string}-${fret}`
+    const questionMastery=recordQuestionPerformance(isCorrect)
     setPositionStats((all) => {
       const previous = all[positionKey] || { correct: 0, wrong: 0 }
       const elapsed=Date.now()-questionStartedRef.current; const completed=previous.correct+(isCorrect?1:0); const averageMs=isCorrect?Math.round(((previous.averageMs||elapsed)*previous.correct+elapsed)/Math.max(1,completed)):previous.averageMs
-      return { ...all, [positionKey]: { ...previous, correct: completed, wrong: previous.wrong + (isCorrect ? 0 : 1), averageMs, lastSeen:Date.now() } }
+      const mastery=isCorrect?(previous.mastery===undefined?questionMastery:Math.round(previous.mastery*.7+questionMastery*.3)):Math.round((previous.mastery??50)*.9)
+      return { ...all, [positionKey]: { ...previous, correct: completed, wrong: previous.wrong + (isCorrect ? 0 : 1), averageMs, mastery, slowCorrect:(previous.slowCorrect||0)+(isCorrect&&questionMastery===40?1:0), lastSeen:Date.now() } }
     })
     setAttempts((n) => n + 1)
     setFeedback({ string, fret, correct: isCorrect })
@@ -570,8 +627,9 @@ function App() {
     const isCorrect = answer === target
     const { string, fret } = questionPosition
     const key = `${string}-${fret}`
+    const questionMastery=recordQuestionPerformance(isCorrect)
     setAttempts((n) => n + 1); setFeedback({ string, fret, correct: isCorrect }); playGuitar(string, fret)
-    setPositionStats((all) => { const previous = all[key] || { correct:0, wrong:0 }; const elapsed=Date.now()-questionStartedRef.current; const completed=previous.correct+(isCorrect?1:0); return {...all,[key]:{...previous,correct:completed,wrong:previous.wrong+(isCorrect?0:1),averageMs:isCorrect?Math.round(((previous.averageMs||elapsed)*previous.correct+elapsed)/Math.max(1,completed)):previous.averageMs,lastSeen:Date.now()}} })
+    setPositionStats((all) => { const previous = all[key] || { correct:0, wrong:0 }; const elapsed=Date.now()-questionStartedRef.current; const completed=previous.correct+(isCorrect?1:0);const mastery=isCorrect?(previous.mastery===undefined?questionMastery:Math.round(previous.mastery*.7+questionMastery*.3)):Math.round((previous.mastery??50)*.9); return {...all,[key]:{...previous,correct:completed,wrong:previous.wrong+(isCorrect?0:1),averageMs:isCorrect?Math.round(((previous.averageMs||elapsed)*previous.correct+elapsed)/Math.max(1,completed)):previous.averageMs,mastery,slowCorrect:(previous.slowCorrect||0)+(isCorrect&&questionMastery===40?1:0),lastSeen:Date.now()}} })
     if (isCorrect) {
       const nextStreak = streak + 1
       setCorrect((n) => n + 1); setStreak(nextStreak); setBestStreak((n) => Math.max(n,nextStreak)); setScore((n) => n + 100 + Math.min(nextStreak-1,10)*10)
@@ -582,6 +640,7 @@ function App() {
   const answerByNote = (note: string) => {
     if (status !== 'playing') return
     const isCorrect = note === target
+    recordQuestionPerformance(isCorrect)
     setAttempts((n) => n + 1); playTone(note, isCorrect)
     if (isCorrect) {
       const nextStreak = streak + 1
@@ -593,8 +652,9 @@ function App() {
   answerRef.current = answerByNote
 
   const accuracy = attempts ? Math.round(correct / attempts * 100) : 0
-  const visibleMinFret = appMode === 'training' ? minFret : 1
-  const visibleMaxFret = appMode === 'training' ? maxFret : 15
+  const positionAssessmentActive=assessmentStep!==null&&trainingType==='positionAssessment'
+  const visibleMinFret = positionAssessmentActive ? 1 : appMode === 'training' ? minFret : 1
+  const visibleMaxFret = positionAssessmentActive ? 12 : appMode === 'training' ? maxFret : 15
   const visibleFretCount = visibleMaxFret - visibleMinFret + 1
   const learningScale = appMode === 'learning' && learningView === 'scales'
   const learningTheory = appMode === 'learning' && learningView === 'theory'
@@ -750,7 +810,7 @@ function App() {
 
       {appMode === 'training' && dailyStep === null && assessmentStep === null && <TrainingNavigation trainingType={trainingType} status={status} onSelect={(type)=>{setTrainingType(type);setStatus('idle')}}/>}
       {appMode === 'training' && dailyStep !== null && <DailySessionBar stages={practiceProfile.dailyPlan} step={dailyStep} timeLeft={timeLeft} onExit={exitDailyPractice}/>}
-      {appMode === 'training' && assessmentStep !== null && <DailySessionBar stages={ASSESSMENT_STAGES} step={assessmentStep} timeLeft={timeLeft} label="首次能力诊断" onExit={()=>{setAssessmentStep(null);setStatus('idle');setAppMode('assessment')}}/>}
+      {appMode === 'training' && assessmentStep !== null && <DailySessionBar stages={ASSESSMENT_STAGES} step={assessmentStep} timeLeft={timeLeft} label="首次能力诊断" onExit={exitAssessment}/>}
 
       <section className="hero">
         <div className="eyebrow"><Sparkles size={14}/> {appMode === 'assessment' ? '先诊断，再制定真正适合你的课程' : appMode === 'daily' ? '定位、关系、应用与听觉，一次完成' : appMode === 'drums' ? '为节拍、分解和即兴提供稳定律动' : appMode === 'recorder' ? '记录每一次练习与灵感' : appMode === 'chords' ? '从组成音推导可弹奏的吉他指法' : learningTheory ? '理解规则，才能更快记住指板' : learningScale ? '看见音阶在整块指板上的形状' : appMode === 'learning' ? '观察、聆听，熟悉音符之间的关系' : '每天 5 分钟，认识整块指板'}</div>
@@ -769,7 +829,7 @@ function App() {
       </section>
 
       <section className={`game-wrap mode-${appMode} ${appMode === 'training' ? `training-${status}` : ''}`}>
-        {appMode === 'assessment' && <AssessmentPage profile={practiceProfile} result={assessmentResult} onStart={startAssessment} onContinue={()=>{setAssessmentResult(null);setAppMode('daily');setStatus('idle')}}/>}
+        {appMode === 'assessment' && <AssessmentPage profile={practiceProfile} result={assessmentResult} onStart={startAssessment} onSkip={skipAssessment} onContinue={()=>{setAssessmentResult(null);setAppMode('daily');setStatus('idle')}}/>}
         {appMode === 'daily' && <DailyPracticePage stages={practiceProfile.dailyPlan} onStart={startDailyPractice}/>}
         {appMode === 'training' && status !== 'playing' && ['locate','stringLocate','adaptive'].includes(trainingType) && <section className="position-practice"><div><span>POSITION PRACTICE</span><strong>按把位练习</strong><small>固定手形覆盖一小段品位，强迫自己离开前五品。</small></div><div className="position-buttons">{FRET_POSITIONS.map((position)=><button key={position.label} className={minFret===position.start&&maxFret===position.end?'selected':''} onClick={()=>{setMinFret(position.start);setMaxFret(position.end)}}><strong>{position.label}</strong><small>{position.start}–{position.end} 品</small></button>)}<button className="position-custom" onClick={()=>setSettingsOpen(true)}><strong>自定义</strong><small>{minFret}–{maxFret} 品</small></button></div></section>}
         {appMode === 'training' && (status === 'playing' || focusTraining) && <div className="landscape-target-hud"><span>{status === 'finished' ? '训练完成' : '当前目标'}</span><strong>{status === 'finished' ? `${score} 分` : trainingType === 'identify' ? '识别高亮位置' : trainingType === 'earLocate' ? '听音找位置' : trainingType === 'octave' ? '8度' : trainingType === 'interval' ? INTERVALS.find((item)=>item[2]===targetInterval)?.[1] : trainingType === 'scaleDegree' ? `${([...SCALES[scaleType].intervals] as number[]).indexOf(trainingGoalOffset)+1}级 · ${target}` : trainingType === 'chordTone' ? `${target} · 和弦内音` : target}</strong><small>{status === 'finished' ? `${accuracy}%` : trainingType === 'stringLocate' || trainingType === 'adaptive' || trainingType === 'scaleDegree' || trainingType === 'chordTone' ? `第 ${targetString+1} 弦` : trainingType === 'arpeggio' ? `${arpeggioStep}/${arpeggioPath.length}` : `${timeLeft}秒`}</small>{focusTraining && <button onClick={exitFocusTraining} aria-label="退出全屏训练"><X size={15}/></button>}</div>}
@@ -858,7 +918,7 @@ function App() {
         {appMode !== 'assessment' && appMode !== 'daily' && appMode !== 'theory' && !learningTheory && !learningCaged && appMode !== 'chords' && appMode !== 'recorder' && <AudioInputPanel state={inputState} devices={inputDevices} deviceId={deviceId} inputLevel={inputLevel} pitchStable={pitchStable} detectedNote={detectedNote} detectedHz={detectedHz} detectedCents={detectedCents} error={inputError} liveMap={liveFretboardMap} calibrationOpen={calibrationOpen} noiseGate={noiseGate} stability={stability} onConnect={selectInput} onDisconnect={disconnectInput} onLiveMapChange={setLiveFretboardMap} onCalibrationOpenChange={setCalibrationOpen} onNoiseGateChange={setNoiseGate} onStabilityChange={setStability}/>} 
         {appMode === 'training' && <TrainingStats timeLeft={timeLeft} score={score} streak={streak}/>}
 
-        {appMode !== 'assessment' && appMode !== 'daily' && appMode !== 'theory' && !learningTheory && appMode !== 'chords' && appMode !== 'recorder' && appMode !== 'drums' && !(appMode === 'learning' && learningView === 'ear') && <Fretboard appMode={appMode} status={status} trainingType={trainingType} style={fretboardStyle} activeStrings={activeStrings} stringNames={STRING_NAMES} minFret={visibleMinFret} fretCount={visibleFretCount} targetString={targetString} feedback={feedback} learningView={learningView} learningScale={learningScale} learningCaged={learningCaged} scaleRootNote={NOTES[scaleRoot]} scaleNotes={scaleNotes} scaleSequenceActive={scaleSequenceActive} scaleSequenceStep={scaleSequenceStep} orderedScaleSequence={orderedScaleSequence} scalePlaybackPosition={scalePlaybackPosition} scalePlaybackStart={scalePlaybackStart} liveFretboardMap={liveFretboardMap} pitchStable={pitchStable} detectedMidi={detectedMidi} openMidi={OPEN_MIDI} positionStats={positionStats} questionPosition={questionPosition} foundPositions={foundPositions} learningEarRevealed={learningEarRevealed} learningEarPosition={learningEarPosition} learningIntervalPair={learningIntervalPair} cagedPositions={cagedPositions} arpeggioPath={arpeggioPath} arpeggioStep={arpeggioStep} noteAt={noteAt} onChoose={choose} onScaleClick={handleScaleSequenceClick} onPlay={playGuitar} onSelectScaleStart={({string,fret})=>{setScalePlaybackStart({string,fret});setScalePlaybackError('');stopScalePlayback()}}/>}
+        {appMode !== 'assessment' && appMode !== 'daily' && appMode !== 'theory' && !learningTheory && appMode !== 'chords' && appMode !== 'recorder' && appMode !== 'drums' && !(appMode === 'learning' && learningView === 'ear') && <Fretboard appMode={appMode} status={status} trainingType={trainingType} style={fretboardStyle} activeStrings={activeStrings} stringNames={STRING_NAMES} minFret={visibleMinFret} fretCount={visibleFretCount} activeFretRange={positionAssessmentActive?assessmentFretRange:null} targetString={targetString} feedback={feedback} learningView={learningView} learningScale={learningScale} learningCaged={learningCaged} scaleRootNote={NOTES[scaleRoot]} scaleNotes={scaleNotes} scaleSequenceActive={scaleSequenceActive} scaleSequenceStep={scaleSequenceStep} orderedScaleSequence={orderedScaleSequence} scalePlaybackPosition={scalePlaybackPosition} scalePlaybackStart={scalePlaybackStart} liveFretboardMap={liveFretboardMap} pitchStable={pitchStable} detectedMidi={detectedMidi} openMidi={OPEN_MIDI} positionStats={positionStats} questionPosition={questionPosition} foundPositions={foundPositions} learningEarRevealed={learningEarRevealed} learningEarPosition={learningEarPosition} learningIntervalPair={learningIntervalPair} cagedPositions={cagedPositions} arpeggioPath={arpeggioPath} arpeggioStep={arpeggioStep} noteAt={noteAt} onChoose={choose} onScaleClick={handleScaleSequenceClick} onPlay={playGuitar} onSelectScaleStart={({string,fret})=>{setScalePlaybackStart({string,fret});setScalePlaybackError('');stopScalePlayback()}}/>}
 
         {appMode === 'training' && status === 'playing' && trainingType === 'identify' && <div className="note-answers">{NOTES.map((note) => <button key={note} onClick={() => answerIdentification(note)}>{note}</button>)}</div>}
 
@@ -867,7 +927,7 @@ function App() {
 
         {appMode !== 'assessment' && appMode !== 'daily' && appMode !== 'theory' && !learningTheory && !learningCaged && appMode !== 'chords' && appMode !== 'recorder' && appMode !== 'drums' && !(appMode === 'learning' && learningView === 'ear') && <div className="game-actions">
           {appMode === 'training' && status === 'idle' && <><button className="primary" onClick={startGame}>开始训练 <span>60 秒</span></button><button className="focus-launch" onClick={enterFocusTraining}>全屏训练</button></>}
-          {appMode === 'training' && status === 'playing' && <><button className="quit" onClick={() => setStatus('finished')}>提前结束</button><button className="focus-launch" onClick={enterFocusTraining}>全屏训练</button></>}
+          {appMode === 'training' && status === 'playing' && <><button className="quit" onClick={assessmentStep!==null?exitAssessment:()=>setStatus('finished')}>{assessmentStep!==null?'退出计划':'提前结束'}</button><button className="focus-launch" onClick={enterFocusTraining}>全屏训练</button></>}
           {appMode === 'training' && status === 'finished' && <button className="primary" onClick={dailyStep!==null?startDailyPractice:startGame}><RotateCcw size={18}/> {dailyStep!==null?'再练 10 分钟':'再来一局'}</button>}
           {appMode === 'learning' && !learningScale && <button className="primary" onClick={() => { setAppMode('training'); setStatus('idle') }}>去训练场检验记忆</button>}
           {learningScale && <button className="primary" onClick={() => {setScaleSequenceActive(true);setScaleSequenceStep(0)}}><Play size={17}/> 开始{scaleDescending?'下行':'上行'}顺序练习</button>}

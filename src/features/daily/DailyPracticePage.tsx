@@ -18,7 +18,9 @@ export function DailyPracticePage({stages,onStart}:PageProps){
 type SessionProps={stages:DailyStage[];step:number;timeLeft:number;label?:string;onExit:()=>void}
 
 export function DailySessionBar({stages,step,timeLeft,label='今日 10 分钟',onExit}:SessionProps){
-  const total=stages.reduce((sum,item)=>sum+item.minutes*60,0),elapsed=stages.slice(0,step).reduce((sum,item)=>sum+item.minutes*60,0)+(stages[step].minutes*60-timeLeft),remaining=Math.max(0,total-elapsed)
+  if(!stages.length)return null
+  const safeStep=Math.max(0,Math.min(step,stages.length-1))
+  const total=stages.reduce((sum,item)=>sum+item.minutes*60,0),elapsed=stages.slice(0,safeStep).reduce((sum,item)=>sum+item.minutes*60,0)+(stages[safeStep].minutes*60-timeLeft),remaining=Math.max(0,total-elapsed)
   const progress=Math.max(0,Math.min(100,elapsed/total*100))
-  return <div className="daily-session-bar"><div><span>{label} · {step+1}/{stages.length}</span><strong>{stages[step].title}</strong><small>下一阶段：{step<stages.length-1?stages[step+1].title:'完成练习'}</small></div><div className="daily-session-progress"><i style={{width:`${progress}%`}}/></div><b>{Math.floor(remaining/60)}:{String(Math.round(remaining%60)).padStart(2,'0')}</b><button onClick={onExit}>退出计划</button></div>
+  return <div className="daily-session-bar"><div><span>{label} · {safeStep+1}/{stages.length}</span><strong>{stages[safeStep].title}</strong><small>下一阶段：{safeStep<stages.length-1?stages[safeStep+1].title:'完成练习'}</small></div><div className="daily-session-progress"><i style={{width:`${progress}%`}}/></div><b>{Math.floor(remaining/60)}:{String(Math.round(remaining%60)).padStart(2,'0')}</b><button onClick={onExit}>退出计划</button></div>
 }

@@ -3,7 +3,7 @@ export type Feedback = { string: number; fret: number; correct: boolean } | null
 export type InputState = 'off' | 'requesting' | 'listening' | 'error'
 export type FretboardStyle = 'practice' | 'realistic' | 'ebony' | 'maple'
 export type AppMode = 'assessment' | 'daily' | 'training' | 'learning' | 'scales' | 'theory' | 'chords' | 'recorder' | 'drums'
-export type TrainingType = 'locate' | 'identify' | 'stringLocate' | 'allNotes' | 'octave' | 'interval' | 'intervalShape' | 'earLocate' | 'adaptive' | 'scaleDegree' | 'chordTone' | 'arpeggio'
+export type TrainingType = 'locate' | 'identify' | 'stringLocate' | 'positionAssessment' | 'allNotes' | 'octave' | 'interval' | 'intervalShape' | 'earLocate' | 'adaptive' | 'scaleDegree' | 'chordTone' | 'arpeggio'
 export type LearningView = 'explore' | 'ear' | 'interval' | 'scales' | 'theory' | 'caged'
 export type SolfegeDirection = 'noteToNumber' | 'numberToNote' | 'noteToName' | 'nameToNote' | 'numberToName' | 'nameToNumber'
 export type KeyMode = 'major' | 'minor'
@@ -13,6 +13,9 @@ export type PositionStats = Record<string, {
   wrong: number
   averageMs?: number
   lastSeen?: number
+  mastery?: number
+  slowCorrect?: number
+  timeouts?: number
 }>
 
 export type Preferences = {

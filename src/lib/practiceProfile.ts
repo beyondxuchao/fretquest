@@ -3,20 +3,21 @@ import type { DailyStage } from '../features/daily/DailyPracticePage'
 
 export const PRACTICE_PROFILE_KEY='fretquest.practiceProfile.v1'
 
-export type StageResult={type:TrainingType;correct:number;attempts:number;accuracy:number}
+export type StageResult={type:TrainingType;correct:number;attempts:number;accuracy:number;mastery?:number;slowCorrect?:number;timeouts?:number;wrongClicks?:number;averageResponseMs?:number}
 export type PracticeSession={kind:'assessment'|'daily';completedAt:number;score:number;accuracy:number;stages:StageResult[]}
 export type PracticeProfile={assessmentCompleted:boolean;weakness:Partial<Record<TrainingType,number>>;dailyPlan:DailyStage[];history:PracticeSession[]}
 
 const DETAILS:Record<TrainingType,{title:string;description:string}>={
-  locate:{title:'薄弱位置复习',description:'优先复习错误多、反应慢的位置'},identify:{title:'反向识别',description:'看到位置后快速说出音名'},stringLocate:{title:'指定把位找音',description:'离开熟悉区域，强化单弦定位'},allNotes:{title:'同名音全搜',description:'连接整块指板上的相同音名'},octave:{title:'八度关系',description:'用形状连接不同弦上的同名音'},interval:{title:'音程定位',description:'从根音定位指定音程'},intervalShape:{title:'音程形状',description:'记忆相邻弦之间的空间关系'},earLocate:{title:'听音找指板',description:'连接耳朵、指板位置和手指'},adaptive:{title:'薄弱位置复习',description:'优先复习错误多、反应慢的位置'},scaleDegree:{title:'音阶音级',description:'把音名放进真实的音阶结构'},chordTone:{title:'和弦内音',description:'定位根音、三音、五音与七音'},arpeggio:{title:'琶音路径',description:'按顺序连接可演奏的和弦音'},
+  locate:{title:'薄弱位置复习',description:'优先复习错误多、反应慢的位置'},identify:{title:'反向识别',description:'看到位置后快速说出音名'},stringLocate:{title:'指定弦定位',description:'强化单根琴弦上的音名定位'},positionAssessment:{title:'把位覆盖',description:'分别考核前、中、高把位定位'},allNotes:{title:'同名音全搜',description:'连接整块指板上的相同音名'},octave:{title:'八度关系',description:'用形状连接不同弦上的同名音'},interval:{title:'音程定位',description:'从根音定位指定音程'},intervalShape:{title:'音程形状',description:'记忆相邻弦之间的空间关系'},earLocate:{title:'听音找指板',description:'连接耳朵、指板位置和手指'},adaptive:{title:'薄弱位置复习',description:'优先复习错误多、反应慢的位置'},scaleDegree:{title:'音阶音级',description:'把音名放进真实的音阶结构'},chordTone:{title:'和弦内音',description:'定位根音、三音、五音与七音'},arpeggio:{title:'琶音路径',description:'按顺序连接可演奏的和弦音'},
 }
 
 export const ASSESSMENT_STAGES:DailyStage[]=[
-  {type:'locate',...DETAILS.locate,minutes:1},
-  {type:'identify',...DETAILS.identify,minutes:1},
-  {type:'stringLocate',...DETAILS.stringLocate,minutes:1},
-  {type:'octave',...DETAILS.octave,minutes:1},
-  {type:'earLocate',...DETAILS.earLocate,minutes:1},
+  {type:'locate',...DETAILS.locate,minutes:5/6},
+  {type:'identify',...DETAILS.identify,minutes:5/6},
+  {type:'stringLocate',...DETAILS.stringLocate,minutes:5/6},
+  {type:'positionAssessment',...DETAILS.positionAssessment,minutes:5/6},
+  {type:'octave',...DETAILS.octave,minutes:5/6},
+  {type:'earLocate',...DETAILS.earLocate,minutes:5/6},
 ]
 
 export const DEFAULT_DAILY_PLAN:DailyStage[]=[
@@ -34,7 +35,7 @@ export function loadPracticeProfile():PracticeProfile{
 
 function normalizeWeakness(results:StageResult[],previous:PracticeProfile['weakness']){
   const next={...previous}
-  results.forEach((result)=>{const error=result.attempts?1-result.correct/result.attempts:.7;const old=next[result.type];next[result.type]=old===undefined?error:old*.65+error*.35})
+  results.forEach((result)=>{const error=result.mastery===undefined?(result.attempts?1-result.correct/result.attempts:.7):1-result.mastery/100;const old=next[result.type];next[result.type]=old===undefined?error:old*.65+error*.35})
   return next
 }
 
@@ -45,7 +46,7 @@ export function buildDailyPlan(weakness:PracticeProfile['weakness'],positionStat
   const slowScore=positionValues.length?positionValues.reduce((sum,item)=>sum+Math.min(1,(item.averageMs||2500)/5000),0)/positionValues.length:.5
   const types:TrainingType[]=['adaptive','stringLocate','octave','scaleDegree','earLocate']
   const weights=types.map((type)=>{
-    if(type==='adaptive')return Math.max(.15,(weakness.adaptive??weakness.locate??.45)*.35+(weakness.identify||.45)*.2+positionError*.25+slowScore*.2)
+    if(type==='adaptive')return Math.max(.15,(weakness.adaptive??weakness.positionAssessment??weakness.locate??.45)*.35+(weakness.identify||.45)*.15+(weakness.positionAssessment||.45)*.15+positionError*.2+slowScore*.15)
     return Math.max(.15,weakness[type]??.45)
   })
   const flexibleSeconds=300,totalWeight=weights.reduce((sum,value)=>sum+value,0)

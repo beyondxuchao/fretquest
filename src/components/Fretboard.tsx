@@ -12,6 +12,7 @@ type FretboardProps = {
   stringNames: readonly string[]
   minFret: number
   fretCount: number
+  activeFretRange?: {min:number;max:number} | null
   targetString: number
   feedback: Feedback
   learningView: string
@@ -47,11 +48,12 @@ type FretboardProps = {
 const MARKERS = new Set([3,5,7,9,12])
 
 export function Fretboard(props: FretboardProps) {
-  const { appMode, status, trainingType, style, activeStrings, stringNames, minFret, fretCount, targetString, feedback, learningView, learningScale, learningCaged, scaleRootNote, scaleNotes, scaleSequenceActive, scaleSequenceStep, orderedScaleSequence, scalePlaybackPosition, scalePlaybackStart, liveFretboardMap, pitchStable, detectedMidi, openMidi, positionStats, questionPosition, foundPositions, learningEarRevealed, learningEarPosition, learningIntervalPair, cagedPositions, arpeggioPath, arpeggioStep, noteAt, onChoose, onScaleClick, onPlay, onSelectScaleStart } = props
+  const { appMode, status, trainingType, style, activeStrings, stringNames, minFret, fretCount, activeFretRange, targetString, feedback, learningView, learningScale, learningCaged, scaleRootNote, scaleNotes, scaleSequenceActive, scaleSequenceStep, orderedScaleSequence, scalePlaybackPosition, scalePlaybackStart, liveFretboardMap, pitchStable, detectedMidi, openMidi, positionStats, questionPosition, foundPositions, learningEarRevealed, learningEarPosition, learningIntervalPair, cagedPositions, arpeggioPath, arpeggioStep, noteAt, onChoose, onScaleClick, onPlay, onSelectScaleStart } = props
   const gridTemplateColumns = `var(--fret-label-width, 62px) repeat(${fretCount}, minmax(var(--fret-cell-min, 54px), 1fr))`
   const boardClasses = `fretboard ${style} ${status === 'finished' ? 'review' : ''} ${appMode === 'learning' && learningView === 'explore' ? 'learning' : ''} ${appMode === 'learning' && learningView === 'interval' ? 'interval-learning' : ''} ${learningCaged ? 'caged-learning' : ''} ${appMode === 'learning' && learningView === 'ear' ? 'ear-learning' : ''} ${learningScale ? 'scale-mode' : ''}`
 
-  return <div className="fretboard-scroll">
+  return <div className={`fretboard-scroll ${activeFretRange?'assessment-fret-range':''}`}>
+    {activeFretRange&&<div className="assessment-range-label"><span>当前考核范围</span><strong>{activeFretRange.min}–{activeFretRange.max} 品</strong><small>范围外已锁定</small></div>}
     <div className="fret-numbers" style={{gridTemplateColumns}}><span/>{Array.from({length:fretCount},(_,index)=><span key={minFret+index}>{minFret+index}</span>)}</div>
     <div className={boardClasses}>
       {activeStrings.map((active,string) => {
@@ -64,9 +66,10 @@ export function Fretboard(props: FretboardProps) {
         const openPlaybackClass = scalePlaybackPosition?.string === string && scalePlaybackPosition.fret === 0 ? 'scale-playing' : ''
         const openStartClass = learningScale && openNote === scaleRootNote && scalePlaybackStart?.string === string && scalePlaybackStart.fret === 0 ? 'scale-start' : ''
         return <div className={`string-row ${!enabled?'disabled':''} ${stringClass}`} key={string} style={{gridTemplateColumns}}>
-          <button className={`string-label ${openHit?(feedback.correct?'correct':'wrong'):''} ${openScaleClass} ${openLiveClass} ${openPlaybackClass} ${openStartClass}`} disabled={!enabled} onClick={() => learningScale ? (openNote === scaleRootNote ? onSelectScaleStart({string,fret:0}) : onPlay(string,0)) : onChoose(string,0)} title={appMode === 'training' ? `${string+1}弦空弦` : `${stringNames[string]} 空弦`}><span>{appMode === 'training'?`${string+1}弦`:stringNames[string]}</span><b>{appMode === 'learning'||status==='finished'||openScaleClass||openLiveClass?openNote:''}</b></button>
+          <button className={`string-label ${openHit?(feedback.correct?'correct':'wrong'):''} ${openScaleClass} ${openLiveClass} ${openPlaybackClass} ${openStartClass}`} disabled={!enabled||Boolean(activeFretRange)} onClick={() => learningScale ? (openNote === scaleRootNote ? onSelectScaleStart({string,fret:0}) : onPlay(string,0)) : onChoose(string,0)} title={appMode === 'training' ? `${string+1}弦空弦` : `${stringNames[string]} 空弦`}><span>{appMode === 'training'?`${string+1}弦`:stringNames[string]}</span><b>{appMode === 'learning'||status==='finished'||openScaleClass||openLiveClass?openNote:''}</b></button>
           {Array.from({length:fretCount},(_,index) => {
             const fret=minFret+index
+            const inActiveRange=!activeFretRange||(fret>=activeFretRange.min&&fret<=activeFretRange.max)
             const hit=feedback?.string===string&&feedback.fret===fret
             const currentNote=noteAt(string,fret)
             const scaleClass=learningScale&&scaleNotes.has(currentNote)?(currentNote===scaleRootNote?'scale-root':'scale-note'):''
@@ -87,7 +90,7 @@ export function Fretboard(props: FretboardProps) {
             const arpeggioIndex=trainingType==='arpeggio'?arpeggioPath.findIndex((position)=>position.string===string&&position.fret===fret):-1
             const arpeggioClass=arpeggioIndex>-1?(arpeggioIndex<arpeggioStep?'path-done':arpeggioIndex===arpeggioStep?'path-next':'path-future'):''
             const scaleStartClass=learningScale&&currentNote===scaleRootNote&&scalePlaybackStart?.string===string&&scalePlaybackStart.fret===fret?'scale-start':''
-            return <button key={fret} onClick={() => learningScale ? (currentNote===scaleRootNote?onSelectScaleStart({string,fret}):onScaleClick(string,fret)) : onChoose(string,fret)} disabled={!enabled} className={`${hit?(feedback.correct?'correct':'wrong'):''} ${scaleClass} ${scalePlaybackClass} ${scaleStartClass} ${heatClass} ${questionClass} ${foundClass} ${sequenceClass} ${earRevealClass} ${intervalAnchorClass} ${intervalTargetClass} ${cagedShapeClass} ${livePitchClass} ${arpeggioClass}`}><span className="string-wire" style={{height:`${1+string*.45}px`}}/><b>{arpeggioIndex>-1&&arpeggioIndex<=arpeggioStep?arpeggioIndex+1:(appMode==='learning'&&(learningView==='explore'||learningView==='interval'))||status==='finished'||hit||scaleClass||scalePlaybackClass||earRevealClass||intervalAnchorClass||intervalTargetClass||cagedShapeClass||livePitchClass?currentNote:''}</b></button>
+            return <button key={fret} onClick={() => learningScale ? (currentNote===scaleRootNote?onSelectScaleStart({string,fret}):onScaleClick(string,fret)) : onChoose(string,fret)} disabled={!enabled||!inActiveRange} className={`${activeFretRange&&fret===activeFretRange.min?'assessment-range-start':''} ${activeFretRange&&fret===activeFretRange.max?'assessment-range-end':''} ${activeFretRange&&!inActiveRange?'outside-assessment-range':''} ${hit?(feedback.correct?'correct':'wrong'):''} ${scaleClass} ${scalePlaybackClass} ${scaleStartClass} ${heatClass} ${questionClass} ${foundClass} ${sequenceClass} ${earRevealClass} ${intervalAnchorClass} ${intervalTargetClass} ${cagedShapeClass} ${livePitchClass} ${arpeggioClass}`}><span className="string-wire" style={{height:`${1+string*.45}px`}}/><b>{questionClass?'?':arpeggioIndex>-1&&arpeggioIndex<=arpeggioStep?arpeggioIndex+1:(appMode==='learning'&&(learningView==='explore'||learningView==='interval'))||status==='finished'||hit||scaleClass||scalePlaybackClass||earRevealClass||intervalAnchorClass||intervalTargetClass||cagedShapeClass||livePitchClass?currentNote:''}</b></button>
           })}
         </div>
       })}
