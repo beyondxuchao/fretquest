@@ -791,7 +791,7 @@ function App() {
   return (
     <main className={`app-${appMode} ${assessmentStep!==null?'assessment-running':''} ${focusTraining ? 'training-focus' : ''} ${scaleFocus ? 'scale-focus' : ''}`}>
       <header className="topbar">
-        <a className="brand" href="#"><span className="brand-mark"><Guitar size={19}/></span><span>Fret<span>Quest</span></span></a>
+        <a className="brand" href="#"><span className="brand-mark"><Guitar size={19}/></span><span>Fret<span>Seek</span></span></a>
         <nav>
           <button className={appMode === 'daily' ? 'nav-active' : ''} onClick={() => { setDailyStep(null); setAppMode('daily'); setStatus('idle') }}>今日 10 分钟</button>
           <button className={appMode === 'training' && dailyStep === null ? 'nav-active' : ''} onClick={() => { setDailyStep(null); setAppMode('training'); setStatus('idle') }}>训练场</button>
