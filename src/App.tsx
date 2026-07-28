@@ -1,41 +1,37 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Cable, ChevronDown, Download, Flame, Guitar, Mic, MicOff, Play, RotateCcw, Settings2, Smartphone, Sparkles, Square, Timer, Trash2, Trophy, Volume2, X } from 'lucide-react'
+import { ChevronDown, Guitar, Play, RotateCcw, Settings2, Smartphone, Sparkles, Square, Volume2, X } from 'lucide-react'
+import { findScaleFingering } from './lib/scaleFingering'
+import { clearLearningData, loadJson, POSITION_STATS_KEY, PREFERENCES_KEY, saveJson } from './lib/storage'
+import { ScaleControls } from './features/scales/ScaleControls'
+import { SettingsModal } from './features/settings/SettingsModal'
+import { Fretboard } from './components/Fretboard'
+import { AudioInputPanel } from './features/audio/AudioInputPanel'
+import { useAudioInput } from './features/audio/useAudioInput'
+import { RecorderStudio } from './features/recorder/RecorderStudio'
+import { useRecorder } from './features/recorder/useRecorder'
+import { DrumMachine } from './features/drums/DrumMachine'
+import { useDrumMachine } from './features/drums/useDrumMachine'
+import { TrainingNavigation } from './features/training/TrainingNavigation'
+import { TrainingStats } from './features/training/TrainingStats'
+import { WeakReview } from './features/training/WeakReview'
+import { LearningToolbar } from './features/learning/LearningToolbar'
+import { IntervalLearningPanel } from './features/learning/IntervalLearningPanel'
+import type { AppMode, Feedback, FretboardStyle, KeyMode, LearningView, PositionStats, Preferences, SolfegeDirection, Status, TrainingType } from './types'
 
 const NOTES = ['C', 'C♯', 'D', 'D♯', 'E', 'F', 'F♯', 'G', 'G♯', 'A', 'A♯', 'B']
 const OPEN_NOTES = [4, 11, 7, 2, 9, 4] // high E → low E
 const OPEN_MIDI = [64, 59, 55, 50, 45, 40] // E4 → E2
 const SAMPLE_NOTE_NAMES = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B']
 const STRING_NAMES = ['1弦 E', '2弦 B', '3弦 G', '4弦 D', '5弦 A', '6弦 E']
-const MARKERS = new Set([3, 5, 7, 9, 12])
-const PREFERENCES_KEY = 'fretquest.preferences.v1'
-
-type Preferences = {
-  minFret: number
-  maxFret: number
-  activeStrings: boolean[]
-  fretboardStyle: FretboardStyle
-  soundOn: boolean
-  noiseGate: number
-  stability: number
-}
 
 function loadPreferences(): Partial<Preferences> {
-  try { return JSON.parse(localStorage.getItem(PREFERENCES_KEY) || '{}') as Partial<Preferences> }
-  catch { return {} }
+  return loadJson<Partial<Preferences>>(PREFERENCES_KEY, {})
 }
 
-type PositionStats = Record<string, { correct: number; wrong: number; averageMs?: number; lastSeen?: number }>
-type TrainingType = 'locate' | 'identify' | 'stringLocate' | 'allNotes' | 'octave' | 'interval' | 'intervalShape' | 'earLocate' | 'adaptive' | 'scaleDegree' | 'chordTone' | 'arpeggio'
 function loadPositionStats(): PositionStats {
-  try { return JSON.parse(localStorage.getItem('fretquest.positionStats.v1') || '{}') as PositionStats }
-  catch { return {} }
+  return loadJson<PositionStats>(POSITION_STATS_KEY, {})
 }
 
-type Status = 'idle' | 'playing' | 'finished'
-type Feedback = { string: number; fret: number; correct: boolean } | null
-type InputState = 'off' | 'requesting' | 'listening' | 'error'
-type FretboardStyle = 'practice' | 'realistic' | 'ebony' | 'maple'
-type AppMode = 'training' | 'learning' | 'scales' | 'theory' | 'chords' | 'recorder' | 'drums'
 const SCALES = {
   major: { name: '大调音阶', intervals: [0, 2, 4, 5, 7, 9, 11] },
   minor: { name: '自然小调', intervals: [0, 2, 3, 5, 7, 8, 10] },
@@ -44,7 +40,6 @@ const SCALES = {
   blues: { name: '布鲁斯音阶', intervals: [0, 3, 5, 6, 7, 10] },
 } satisfies Record<string, { name: string; intervals: number[] }>
 type ScaleType = keyof typeof SCALES
-type SolfegeDirection = 'noteToNumber' | 'numberToNote' | 'noteToName' | 'nameToNote' | 'numberToName' | 'nameToNumber'
 const CHORD_TYPES = {
   major: { name: '大三和弦', suffix: '', formula: '1 · 3 · 5', intervals: [0, 4, 7] },
   minor: { name: '小三和弦', suffix: 'm', formula: '1 · ♭3 · 5', intervals: [0, 3, 7] },
@@ -57,7 +52,6 @@ const CHORD_TYPES = {
   minor7: { name: '小七和弦', suffix: 'm7', formula: '1 · ♭3 · 5 · ♭7', intervals: [0, 3, 7, 10] },
 } as const
 type ChordType = keyof typeof CHORD_TYPES
-type KeyMode = 'major' | 'minor'
 const DIAGRAM_OPEN = [4, 9, 2, 7, 11, 4] // low E → high E
 const CAGED_SHAPES = {
   C: { root: 0, frets: [null, 3, 2, 0, 1, 0], tip: '根音在第 5 弦；向上移动时，以横按替代开放弦。' },
@@ -158,13 +152,8 @@ function noteAt(string: number, fret: number) {
 function App() {
   const initialPreferences = useMemo(loadPreferences, [])
   const [appMode, setAppMode] = useState<AppMode>('training')
-  const [drumBpm, setDrumBpm] = useState(96)
-  const [drumPlaying, setDrumPlaying] = useState(false)
-  const [metronomePlaying, setMetronomePlaying] = useState(false)
-  const [metronomeBeat, setMetronomeBeat] = useState(0)
-  const [drumStep, setDrumStep] = useState(-1)
-  const [drumPattern, setDrumPattern] = useState({ kick: [true,false,false,false,true,false,false,false,true,false,false,false,true,false,false,false], snare: [false,false,false,false,true,false,false,false,false,false,false,false,true,false,false,false], hat: [true,false,true,false,true,false,true,false,true,false,true,false,true,false,true,false] })
-  const [learningView, setLearningView] = useState<'explore' | 'ear' | 'interval' | 'scales' | 'theory' | 'caged'>('explore')
+  const {bpm:drumBpm,setBpm:setDrumBpm,drumPlaying,setDrumPlaying,metronomePlaying,setMetronomePlaying,metronomeBeat,drumStep,pattern:drumPattern,setPattern:setDrumPattern,playMetronomeClick}=useDrumMachine()
+  const [learningView, setLearningView] = useState<LearningView>('explore')
   const [cagedShape, setCagedShape] = useState<keyof typeof CAGED_SHAPES>('C')
   const [cagedAnimating, setCagedAnimating] = useState(false)
   const [learningIntervalSemitones, setLearningIntervalSemitones] = useState(7)
@@ -174,7 +163,6 @@ function App() {
   const [learningEarPosition, setLearningEarPosition] = useState({ string: 5, fret: 1 })
   const [learningEarRevealed, setLearningEarRevealed] = useState(false)
   const [trainingType, setTrainingType] = useState<TrainingType>('locate')
-  const [trainingMenu, setTrainingMenu] = useState<'basic' | 'relation' | 'applied' | null>(null)
   const [questionPosition, setQuestionPosition] = useState({ string: 0, fret: 1 })
   const [targetString, setTargetString] = useState(0)
   const [targetInterval, setTargetInterval] = useState(7)
@@ -231,40 +219,18 @@ function App() {
   const [scaleFocus, setScaleFocus] = useState(false)
   const [fretboardStyle, setFretboardStyle] = useState<FretboardStyle>(() => initialPreferences.fretboardStyle ?? 'practice')
   const [soundOn, setSoundOn] = useState(() => initialPreferences.soundOn ?? true)
-  const [inputState, setInputState] = useState<InputState>('off')
-  const [inputDevices, setInputDevices] = useState<MediaDeviceInfo[]>([])
-  const [deviceId, setDeviceId] = useState('')
-  const [detectedNote, setDetectedNote] = useState<string | null>(null)
-  const [detectedMidi, setDetectedMidi] = useState<number | null>(null)
-  const [detectedHz, setDetectedHz] = useState(0)
-  const [detectedCents, setDetectedCents] = useState(0)
-  const [pitchStable, setPitchStable] = useState(false)
-  const [inputLevel, setInputLevel] = useState(0)
-  const [inputError, setInputError] = useState('')
   const [calibrationOpen, setCalibrationOpen] = useState(false)
   const [liveFretboardMap, setLiveFretboardMap] = useState(false)
-  const [recordingState, setRecordingState] = useState<'idle' | 'recording' | 'ready'>('idle')
-  const [recordingUrl, setRecordingUrl] = useState('')
-  const [recordingSeconds, setRecordingSeconds] = useState(0)
-  const [recordingMime, setRecordingMime] = useState('audio/webm')
   const [noiseGate, setNoiseGate] = useState(() => initialPreferences.noiseGate ?? 8)
   const [stability, setStability] = useState(() => initialPreferences.stability ?? 7)
   const timerRef = useRef<number | null>(null)
-  const audioRef = useRef<{ context: AudioContext; stream: MediaStream; raf: number } | null>(null)
-  const recorderRef = useRef<MediaRecorder | null>(null)
-  const recordingChunksRef = useRef<Blob[]>([])
-  const recordingTimerRef = useRef<number | null>(null)
   const questionStartedRef = useRef(Date.now())
   const answerRef = useRef<(note: string) => void>(() => {})
-  const targetRef = useRef(target)
-  const statusRef = useRef<Status>(status)
-  const noiseGateRef = useRef(noiseGate)
-  const stabilityRef = useRef(stability)
   const playbackContextRef = useRef<AudioContext | null>(null)
   const guitarSampleCache = useRef(new Map<number, AudioBuffer>())
-  const drumTimerRef = useRef<number | null>(null)
-  const metronomeTimerRef = useRef<number | null>(null)
   const scalePlaybackTimersRef = useRef<number[]>([])
+  const {state:inputState,devices:inputDevices,deviceId,detectedNote,detectedMidi,detectedHz,detectedCents,pitchStable,inputLevel,error:inputError,stream:inputStream,connect:connectInput,stop:stopInput}=useAudioInput({notes:NOTES,noiseGate,stability,status,onStableNote:(note)=>answerRef.current(note)})
+  const {state:recordingState,url:recordingUrl,seconds:recordingSeconds,mime:recordingMime,start:startRecording,stop:stopRecording,clear:clearRecording}=useRecorder(inputStream)
 
   const availableNotes = useMemo(() => {
     const found = new Set<string>()
@@ -276,11 +242,11 @@ function App() {
 
   useEffect(() => {
     const preferences: Preferences = { minFret, maxFret, activeStrings, fretboardStyle, soundOn, noiseGate, stability }
-    try { localStorage.setItem(PREFERENCES_KEY, JSON.stringify(preferences)) } catch { /* Storage may be unavailable in private mode. */ }
+    saveJson(PREFERENCES_KEY, preferences)
   }, [minFret, maxFret, activeStrings, fretboardStyle, soundOn, noiseGate, stability])
 
   useEffect(() => {
-    try { localStorage.setItem('fretquest.positionStats.v1', JSON.stringify(positionStats)) } catch { /* Ignore unavailable storage. */ }
+    saveJson(POSITION_STATS_KEY, positionStats)
   }, [positionStats])
 
   const nextTarget = useCallback((current?: string) => {
@@ -343,38 +309,6 @@ function App() {
     osc.connect(gain).connect(ctx.destination)
     osc.start(); osc.stop(ctx.currentTime + 0.24)
   }
-
-  const playDrumHit = (kind: 'kick' | 'snare' | 'hat') => {
-    const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
-    const ctx = playbackContextRef.current || new AudioContextClass()
-    playbackContextRef.current = ctx
-    if (ctx.state === 'suspended') void ctx.resume()
-    const now = ctx.currentTime
-    if (kind === 'kick') { const osc=ctx.createOscillator(); const gain=ctx.createGain(); osc.type='sine'; osc.frequency.setValueAtTime(150,now); osc.frequency.exponentialRampToValueAtTime(48,now+.13); gain.gain.setValueAtTime(.55,now); gain.gain.exponentialRampToValueAtTime(.001,now+.18); osc.connect(gain).connect(ctx.destination); osc.start(now);osc.stop(now+.19); return }
-    const length=kind==='snare' ? .16 : .055; const buffer=ctx.createBuffer(1,Math.ceil(ctx.sampleRate*length),ctx.sampleRate); const data=buffer.getChannelData(0); for(let i=0;i<data.length;i++)data[i]=(Math.random()*2-1)*(1-i/data.length); const source=ctx.createBufferSource();const filter=ctx.createBiquadFilter();const gain=ctx.createGain(); filter.type='highpass';filter.frequency.value=kind==='snare'?1200:6500;gain.gain.setValueAtTime(kind==='snare' ? .24 : .11,now);gain.gain.exponentialRampToValueAtTime(.001,now+length);source.buffer=buffer;source.connect(filter).connect(gain).connect(ctx.destination);source.start(now)
-  }
-
-  const playMetronomeClick = (accent: boolean) => {
-    const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
-    const ctx = playbackContextRef.current || new AudioContextClass(); playbackContextRef.current = ctx
-    if (ctx.state === 'suspended') void ctx.resume()
-    const osc=ctx.createOscillator(), gain=ctx.createGain(), now=ctx.currentTime
-    osc.type='square';osc.frequency.value=accent?1760:1120;gain.gain.setValueAtTime(accent ? .22 : .12,now);gain.gain.exponentialRampToValueAtTime(.001,now+.045);osc.connect(gain).connect(ctx.destination);osc.start(now);osc.stop(now+.05)
-  }
-
-  useEffect(() => {
-    if (!drumPlaying) { if (drumTimerRef.current) window.clearInterval(drumTimerRef.current); drumTimerRef.current=null; setDrumStep(-1); return }
-    const tick=()=>setDrumStep((previous)=>{const next=(previous+1)%16;if(drumPattern.kick[next])playDrumHit('kick');if(drumPattern.snare[next])playDrumHit('snare');if(drumPattern.hat[next])playDrumHit('hat');return next})
-    tick(); drumTimerRef.current=window.setInterval(tick, 60000 / drumBpm / 4)
-    return ()=>{if(drumTimerRef.current)window.clearInterval(drumTimerRef.current)}
-  }, [drumBpm, drumPattern, drumPlaying])
-
-  useEffect(() => {
-    if (!metronomePlaying) { if(metronomeTimerRef.current)window.clearInterval(metronomeTimerRef.current);metronomeTimerRef.current=null;setMetronomeBeat(0);return }
-    const tick=()=>setMetronomeBeat((beat)=>{const next=(beat+1)%4;playMetronomeClick(next===0);return next})
-    playMetronomeClick(true);metronomeTimerRef.current=window.setInterval(tick,60000/drumBpm)
-    return ()=>{if(metronomeTimerRef.current)window.clearInterval(metronomeTimerRef.current)}
-  }, [drumBpm, metronomePlaying])
 
   const playGuitar = (string: number, fret: number) => {
     if (!soundOn) return
@@ -457,111 +391,13 @@ function App() {
     return () => clearTimeout(replayTimer)
   }, [earPromptId, questionPosition.fret, questionPosition.string, status, trainingType])
 
-  const clearRecording = useCallback(() => {
-    if (recordingUrl) URL.revokeObjectURL(recordingUrl)
-    setRecordingUrl(''); setRecordingSeconds(0); setRecordingState('idle')
-  }, [recordingUrl])
+  const disconnectInput = useCallback(() => {
+    stopRecording(); stopInput(); setLiveFretboardMap(false)
+  }, [stopInput, stopRecording])
 
-  const stopRecording = useCallback(() => {
-    if (recordingTimerRef.current) { window.clearInterval(recordingTimerRef.current); recordingTimerRef.current = null }
-    if (recorderRef.current?.state === 'recording') recorderRef.current.stop()
-  }, [])
-
-  const startRecording = useCallback(() => {
-    const stream = audioRef.current?.stream
-    if (!stream || typeof MediaRecorder === 'undefined') return
-    if (recordingUrl) URL.revokeObjectURL(recordingUrl)
-    const candidates = ['audio/webm;codecs=opus', 'audio/ogg;codecs=opus', 'audio/mp4']
-    const mimeType = candidates.find((type) => MediaRecorder.isTypeSupported(type)) || ''
-    const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined)
-    recordingChunksRef.current = []
-    recorder.ondataavailable = (event) => { if (event.data.size) recordingChunksRef.current.push(event.data) }
-    recorder.onstop = () => {
-      const finalType = recorder.mimeType || mimeType || 'audio/webm'
-      const blob = new Blob(recordingChunksRef.current, { type: finalType })
-      setRecordingMime(finalType); setRecordingUrl(URL.createObjectURL(blob)); setRecordingState('ready')
-      recorderRef.current = null
-    }
-    recorderRef.current = recorder
-    setRecordingUrl(''); setRecordingSeconds(0); setRecordingState('recording')
-    recorder.start(250)
-    recordingTimerRef.current = window.setInterval(() => setRecordingSeconds((value) => value + 1), 1000)
-  }, [recordingUrl])
-
-  const stopInput = useCallback(() => {
-    stopRecording()
-    const audio = audioRef.current
-    if (audio) {
-      cancelAnimationFrame(audio.raf)
-      audio.stream.getTracks().forEach((track) => track.stop())
-      void audio.context.close()
-      audioRef.current = null
-    }
-    setInputState('off'); setDetectedNote(null); setDetectedMidi(null); setDetectedHz(0); setDetectedCents(0); setPitchStable(false); setInputLevel(0); setLiveFretboardMap(false)
-  }, [stopRecording])
-
-  const connectInput = useCallback(async (selectedId?: string) => {
-    stopInput()
-    setInputState('requesting'); setInputError('')
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: { deviceId: selectedId ? { exact: selectedId } : undefined, echoCancellation: false, noiseSuppression: false, autoGainControl: false },
-      })
-      const devices = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'audioinput')
-      const activeId = stream.getAudioTracks()[0]?.getSettings().deviceId || selectedId || ''
-      setInputDevices(devices); setDeviceId(activeId)
-      const context = new AudioContext()
-      const source = context.createMediaStreamSource(stream)
-      const analyser = context.createAnalyser()
-      analyser.fftSize = 4096; analyser.smoothingTimeConstant = 0
-      source.connect(analyser)
-      const samples = new Float32Array(analyser.fftSize)
-      let lastNote = ''; let stableFrames = 0; let lastSubmitted = ''; let quietFrames = 0
-
-      const detectPitch = () => {
-        analyser.getFloatTimeDomainData(samples)
-        let rms = 0
-        for (const sample of samples) rms += sample * sample
-        rms = Math.sqrt(rms / samples.length)
-        setInputLevel(Math.min(1, rms * 14))
-        let frequency = 0
-        if (rms > noiseGateRef.current / 1000) {
-          const minLag = Math.floor(context.sampleRate / 1050)
-          const maxLag = Math.min(Math.floor(context.sampleRate / 65), samples.length / 2)
-          let bestLag = -1; let bestCorrelation = 0
-          for (let lag = minLag; lag <= maxLag; lag++) {
-            let correlation = 0
-            for (let i = 0; i < samples.length - lag; i++) correlation += samples[i] * samples[i + lag]
-            if (correlation > bestCorrelation) { bestCorrelation = correlation; bestLag = lag }
-          }
-          if (bestLag > 0) frequency = context.sampleRate / bestLag
-        }
-        if (frequency) {
-          const midi = Math.round(69 + 12 * Math.log2(frequency / 440))
-          const note = NOTES[((midi % 12) + 12) % 12]
-          const exactFrequency = 440 * Math.pow(2, (midi - 69) / 12)
-          const cents = Math.round(1200 * Math.log2(frequency / exactFrequency))
-          setDetectedNote(note); setDetectedMidi(midi); setDetectedHz(frequency); setDetectedCents(cents); quietFrames = 0
-          if (note === lastNote) stableFrames++; else { lastNote = note; stableFrames = 1 }
-          setPitchStable(stableFrames >= stabilityRef.current)
-          if (stableFrames >= stabilityRef.current && Math.abs(cents) <= 35 && note !== lastSubmitted && statusRef.current === 'playing') {
-            lastSubmitted = note; answerRef.current(note)
-          }
-        } else {
-          quietFrames++
-          if (quietFrames > 5) { setDetectedNote(null); setDetectedMidi(null); setDetectedHz(0); setDetectedCents(0); setPitchStable(false); lastSubmitted = ''; stableFrames = 0 }
-        }
-        if (audioRef.current) audioRef.current.raf = requestAnimationFrame(detectPitch)
-      }
-      audioRef.current = { context, stream, raf: requestAnimationFrame(detectPitch) }
-      setInputState('listening')
-    } catch (error) {
-      setInputState('error')
-      setInputError(error instanceof DOMException && error.name === 'NotAllowedError' ? '没有麦克风权限，请在浏览器地址栏中允许访问。' : '无法打开音频输入，请确认设备已连接且未被其他程序占用。')
-    }
-  }, [stopInput])
-
-  useEffect(() => () => stopInput(), [stopInput])
+  const selectInput = useCallback((selectedId?: string) => {
+    stopRecording(); setLiveFretboardMap(false); void connectInput(selectedId)
+  }, [connectInput, stopRecording])
 
   const startGame = () => {
     setScore(0); setStreak(0); setBestStreak(0); setCorrect(0); setAttempts(0)
@@ -695,10 +531,6 @@ function App() {
     } else { setStreak(0); setScore((n) => Math.max(0, n - 20)) }
   }
   answerRef.current = answerByNote
-  targetRef.current = target
-  statusRef.current = status
-  noiseGateRef.current = noiseGate
-  stabilityRef.current = stability
 
   const accuracy = attempts ? Math.round(correct / attempts * 100) : 0
   const visibleMinFret = appMode === 'training' ? minFret : 1
@@ -724,11 +556,6 @@ function App() {
     }
     return null
   }, [appMode, learningIntervalAnchorString, learningIntervalSemitones, maxFret])
-  const weakPositions = useMemo(() => Object.entries(positionStats).map(([key, value]) => {
-    const [string, fret] = key.split('-').map(Number)
-    const total = value.correct + value.wrong
-    return { string, fret, ...value, total, accuracy: total ? Math.round(value.correct / total * 100) : 0 }
-  }).filter((item) => item.total >= 2).sort((a, b) => a.accuracy - b.accuracy || b.total - a.total).slice(0, 5), [positionStats])
   const scaleNotes = useMemo(() => new Set(SCALES[scaleType].intervals.map((interval) => NOTES[(scaleRoot + interval) % 12])), [scaleRoot, scaleType])
   const scaleSequence = useMemo(() => {
     // 学习音阶始终使用完整指板，而不是训练设置中的弦和品位范围。
@@ -806,29 +633,8 @@ function App() {
     const validSelectedStart = scalePlaybackStart && noteAt(scalePlaybackStart.string, scalePlaybackStart.fret) === NOTES[scaleRoot] ? scalePlaybackStart : null
     const start = validSelectedStart || scaleSequence[0]
     if (!start) { setScalePlaybackError('请先点击指板上的根音作为起点。'); return }
-    type Position = {string:number;fret:number;midi:number}
-    type Route = {position:Position;count:number;cost:number;path:Position[]}
-    const startMidi = OPEN_MIDI[start.string] + start.fret
-    const preferOpenPosition = start.fret <= 3
-    const all = OPEN_MIDI.flatMap((openMidi,string)=>Array.from({length:16},(_,fret)=>({string,fret,midi:openMidi+fret})))
-    let routes: Route[] = [{position:{...start,midi:startMidi},count:1,cost:0,path:[{...start,midi:startMidi}]}]
-    for (const interval of [...SCALES[scaleType].intervals,12].slice(1)) {
-      const nextRoutes: Route[] = []
-      for (const route of routes) for (const candidate of all.filter((position)=>position.midi===startMidi+interval)) {
-        if (candidate.string > route.position.string || (candidate.string === route.position.string && route.count >= 3)) continue
-        const changed = candidate.string !== route.position.string
-        const stringDistance = route.position.string-candidate.string
-        const openStringBonus = preferOpenPosition && candidate.fret === 0 ? 7 : 0
-        const cost = route.cost + Math.abs(candidate.fret-route.position.fret) + (changed ? 1+stringDistance : 0) - openStringBonus
-        nextRoutes.push({position:candidate,count:changed?1:route.count+1,cost,path:[...route.path,candidate]})
-      }
-      if (!nextRoutes.length) { setScalePlaybackError('从这个根音无法在 0–15 品内完成连续上行八度，请换一个根音。'); return }
-      const best = new Map<string,Route>()
-      nextRoutes.forEach((route)=>{const key=`${route.position.string}-${route.position.fret}-${route.count}`;if(!best.has(key)||best.get(key)!.cost>route.cost)best.set(key,route)})
-      routes = [...best.values()]
-    }
-    const ascending = routes.sort((a,b)=>a.cost-b.cost)[0]?.path.map(({string,fret})=>({string,fret}))
-    if (!ascending) { setScalePlaybackError('无法生成指法路径。'); return }
+    const ascending = findScaleFingering({ start, intervals: SCALES[scaleType].intervals, openMidi: OPEN_MIDI })
+    if (!ascending) { setScalePlaybackError('从这个根音无法在 0–15 品内完成连续上行八度，请换一个根音。'); return }
     setScalePlaybackError('')
     const path = [...ascending, ...ascending.slice(0, -1).reverse()]
     const beatMs = 60000 / scalePlaybackBpm
@@ -881,22 +687,7 @@ function App() {
 
       {((appMode === 'training' && status === 'playing') || (appMode === 'learning' && ['explore','interval','scales'].includes(learningView))) && <div className="portrait-orientation-guard" role="dialog" aria-modal="true" aria-label="请横屏使用指板"><div className="rotate-phone"><Smartphone size={42}/><i>↻</i></div><strong>请将手机横过来</strong><p>横屏后可以完整查看吉他指板<br/>页面会自动恢复，无需刷新</p><button onClick={()=>setSettingsOpen(true)}><Settings2 size={14}/> 打开设置</button></div>}
 
-      {appMode === 'training' && <div className="training-subnav">
-        <div className="current-training"><span>当前训练</span><strong>{{locate:'音名定位',identify:'反向识别',stringLocate:'指定弦定位',allNotes:'同名音全搜',octave:'八度形状',interval:'音程定位',intervalShape:'音程形状',earLocate:'听音找指板',adaptive:'自适应复习',scaleDegree:'音阶音级',chordTone:'和弦内音',arpeggio:'琶音路径'}[trainingType]}</strong></div>
-        <div className="training-menus">
-          <div className="training-menu-wrap"><button className={['locate','identify','stringLocate'].includes(trainingType) ? 'active' : ''} disabled={status === 'playing'} onClick={() => setTrainingMenu(trainingMenu === 'basic' ? null : 'basic')}>基础定位 <ChevronDown size={13}/></button>{trainingMenu === 'basic' && <div className="training-popover">
-            {([['locate','音名定位','看到音名，寻找指板位置'],['identify','反向识别','看到位置，选择正确音名'],['stringLocate','指定弦定位','只在指定弦上寻找目标音']] as const).map(([value,title,description]) => <button className={trainingType === value ? 'selected' : ''} key={value} onClick={() => {setTrainingType(value);setStatus('idle');setTrainingMenu(null)}}><i>{value === 'locate' ? '01' : value === 'identify' ? '02' : '03'}</i><span><strong>{title}</strong><small>{description}</small></span></button>)}
-          </div>}</div>
-          <div className="training-menu-wrap"><button className={['allNotes','octave','interval','intervalShape','earLocate'].includes(trainingType) ? 'active' : ''} disabled={status === 'playing'} onClick={() => setTrainingMenu(trainingMenu === 'relation' ? null : 'relation')}>关系训练 <ChevronDown size={13}/></button>{trainingMenu === 'relation' && <div className="training-popover">
-            {([['allNotes','同名音全搜','找齐范围内全部同名音'],['octave','八度形状','寻找上方一个八度位置'],['interval','音程定位','从根音寻找指定音程'],['intervalShape','音程形状','固定在相邻高音弦上找目标'],['earLocate','听音找指板','聆听真实吉他音，寻找相同音高']] as const).map(([value,title,description]) => <button className={trainingType === value ? 'selected' : ''} key={value} onClick={() => {setTrainingType(value);setStatus('idle');setTrainingMenu(null)}}><i>{value === 'allNotes' ? '04' : value === 'octave' ? '05' : value === 'interval' ? '06' : value === 'intervalShape' ? '07' : '08'}</i><span><strong>{title}</strong><small>{description}</small></span></button>)}
-          </div>}</div>
-          <div className="training-menu-wrap"><button className={['adaptive','scaleDegree','chordTone','arpeggio'].includes(trainingType) ? 'active' : ''} disabled={status === 'playing'} onClick={() => setTrainingMenu(trainingMenu === 'applied' ? null : 'applied')}>应用训练 <ChevronDown size={13}/></button>{trainingMenu === 'applied' && <div className="training-popover">
-            {([['adaptive','自适应复习','根据错误率与反应时间安排薄弱位置'],['scaleDegree','音阶音级','在指定弦寻找当前音阶的目标级数'],['chordTone','和弦内音','寻找根音、三音、五音与七音'],['arpeggio','琶音路径','按音高顺序完成和弦琶音']] as const).map(([value,title,description],index) => <button className={trainingType === value ? 'selected' : ''} key={value} onClick={() => {setTrainingType(value);setStatus('idle');setTrainingMenu(null)}}><i>{String(index+8).padStart(2,'0')}</i><span><strong>{title}</strong><small>{description}</small></span></button>)}
-          </div>}</div>
-        </div>
-        <div className="training-description"><span>{{locate:'看到音名，在整块指板上寻找位置',identify:'看到高亮位置，从十二个音名中选择',stringLocate:'只在指定的一根弦上寻找目标音',allNotes:'找齐当前范围内所有相同音名',octave:'从根音寻找上方一个八度的位置',interval:'从根音寻找指定的音程距离',intervalShape:'从根音到指定相邻高音弦，复现音程手形',earLocate:'聆听单音，在指板上找到相同实际音高',adaptive:'优先复习错误多、反应慢和长期未练的位置',scaleDegree:'把音阶级数映射到指定琴弦',chordTone:'识别并定位当前和弦的组成音',arpeggio:'按顺序连接和弦音，建立可演奏路径'}[trainingType]}</span></div>
-        <div className={`training-status ${status}`}><i/>{status === 'playing' ? '训练进行中' : status === 'finished' ? '本局已完成' : '等待开始'}</div>
-      </div>}
+      {appMode === 'training' && <TrainingNavigation trainingType={trainingType} status={status} onSelect={(type)=>{setTrainingType(type);setStatus('idle')}}/>}
 
       <section className="hero">
         <div className="eyebrow"><Sparkles size={14}/> {appMode === 'drums' ? '为节拍、分解和即兴提供稳定律动' : appMode === 'recorder' ? '记录每一次练习与灵感' : appMode === 'chords' ? '从组成音推导可弹奏的吉他指法' : learningTheory ? '理解规则，才能更快记住指板' : learningScale ? '看见音阶在整块指板上的形状' : appMode === 'learning' ? '观察、聆听，熟悉音符之间的关系' : '每天 5 分钟，认识整块指板'}</div>
@@ -921,23 +712,9 @@ function App() {
           <span>训练内容</span><label>根音<select value={trainingType === 'scaleDegree' ? scaleRoot : chordRoot} onChange={(e)=>trainingType === 'scaleDegree' ? setScaleRoot(Number(e.target.value)) : setChordRoot(Number(e.target.value))}>{NOTES.map((note,index)=><option key={note} value={index}>{note}</option>)}</select></label>
           {trainingType === 'scaleDegree' ? <label>音阶<select value={scaleType} onChange={(e)=>setScaleType(e.target.value as ScaleType)}>{Object.entries(SCALES).map(([key,value])=><option key={key} value={key}>{value.name}</option>)}</select></label> : <label>和弦<select value={chordType} onChange={(e)=>setChordType(e.target.value as ChordType)}>{Object.entries(CHORD_TYPES).map(([key,value])=><option key={key} value={key}>{value.name}</option>)}</select></label>}
         </div>}
-        {appMode === 'drums' && <section className="drum-machine"><div className="drum-head"><div><span>GUITAR PRACTICE GROOVE</span><h2>16 步节奏编排</h2><p>点击格子编辑节奏，用稳定的四分音符与十六分律动练习扫弦、节拍和即兴。</p></div><div className="drum-transport"><button onClick={()=>setDrumBpm((b)=>Math.max(40,b-5))}>−</button><strong>{drumBpm}<small>BPM</small></strong><button onClick={()=>setDrumBpm((b)=>Math.min(240,b+5))}>+</button><button className={drumPlaying?'stop':'start'} onClick={()=>setDrumPlaying((value)=>!value)}>{drumPlaying?<><Square size={14}/> 停止</>:<><Play size={15}/> 播放</>}</button></div></div><div className="metronome-card"><div className={`metronome-body ${metronomePlaying?'swinging':''}`} style={{'--swing-duration':`${60/drumBpm}s`} as React.CSSProperties}><i/><b/><em/></div><div><span>TRADITIONAL METRONOME</span><h3>传统节拍器 · {drumBpm} BPM</h3><p>每小节第一拍为重音；摆锤左右各一次正好是一拍。</p><div className="metro-beats">{[0,1,2,3].map((beat)=><i key={beat} className={metronomePlaying&&metronomeBeat===beat?'active':''}>{beat+1}</i>)}</div></div><button className={metronomePlaying?'metro-stop':'metro-start'} onClick={()=>setMetronomePlaying((value)=>!value)}>{metronomePlaying?<><Square size={14}/> 停止</>:<><Play size={15}/> 开始节拍</>}</button></div><div className="drum-presets"><span>快速节奏</span><button onClick={()=>setDrumPattern({kick:[true,false,false,false,true,false,false,false,true,false,false,false,true,false,false,false],snare:[false,false,false,false,true,false,false,false,false,false,false,false,true,false,false,false],hat:[true,false,true,false,true,false,true,false,true,false,true,false,true,false,true,false]})}>基础 Rock</button><button onClick={()=>setDrumPattern({kick:[true,false,false,true,false,false,true,false,true,false,false,true,false,false,true,false],snare:[false,false,false,false,true,false,false,false,false,false,false,false,true,false,false,false],hat:Array(16).fill(true)})}>8 Beat</button><button onClick={()=>setDrumPattern({kick:[true,false,true,false,false,false,true,false,true,false,false,true,false,true,false,false],snare:[false,false,false,false,true,false,false,false,false,false,false,false,true,false,false,false],hat:[true,false,true,true,true,false,true,true,true,false,true,true,true,false,true,true]})}>Funk</button></div><div className="drum-grid">{(['kick','snare','hat'] as const).map((row)=><div className="drum-row" key={row}><strong>{row==='kick'?'底鼓':row==='snare'?'军鼓':'踩镲'}</strong>{drumPattern[row].map((on,index)=><button key={index} aria-label={`${row} 第 ${index+1} 步`} className={`${on?'on':''} ${drumStep===index?'playing':''} ${index%4===0?'beat':''}`} onClick={()=>setDrumPattern((pattern)=>({...pattern,[row]:pattern[row].map((value,step)=>step===index?!value:value)}))}>{index%4===0?index/4+1:''}</button>)}</div>)}</div><div className="drum-tip"><strong>练琴建议</strong><span>从 70 BPM 开始，每次连续稳定演奏 4 小节后再提升 5 BPM。可保持本页播放鼓机，同时切到录音机录下练习。</span></div></section>}
-        {appMode === 'recorder' && <section className="recorder-studio">
-          <div className="studio-toolbar"><div><span className={`device-light ${inputState === 'listening' ? 'online' : ''}`}/><strong>{inputState === 'listening' ? '输入设备已就绪' : '尚未连接输入设备'}</strong><small>{inputState === 'listening' ? (inputDevices.find((device)=>device.deviceId===deviceId)?.label || 'USB 音频输入') : '支持 G5n、USB 声卡和设备麦克风'}</small></div>{inputState === 'listening' && inputDevices.length > 1 && <select value={deviceId} onChange={(e)=>void connectInput(e.target.value)}>{inputDevices.map((device,index)=><option key={device.deviceId} value={device.deviceId}>{device.label || `音频输入 ${index+1}`}</option>)}</select>}<button className="studio-connect" disabled={inputState === 'requesting'} onClick={()=>inputState === 'listening'?stopInput():void connectInput()}>{inputState === 'listening'?<><MicOff size={15}/>断开设备</>:<><Cable size={15}/>{inputState === 'requesting'?'连接中…':'连接设备'}</>}</button></div>
-          <div className={`studio-deck ${recordingState}`}>
-            <div className="studio-display"><span>{recordingState === 'recording' ? 'RECORDING' : recordingState === 'ready' ? 'TAKE READY' : 'READY'}</span><time>{String(Math.floor(recordingSeconds / 60)).padStart(2,'0')}<i>:</i>{String(recordingSeconds % 60).padStart(2,'0')}</time><small>{recordingState === 'recording' ? '正在录制设备输入原声' : inputState === 'listening' ? '按下录音键开始' : '请先连接输入设备'}</small></div>
-            <div className="studio-wave" aria-hidden="true">{Array.from({length:44},(_,index)=><i key={index} style={{height:`${inputState === 'listening' ? Math.max(3, inputLevel*54*(.45+.55*Math.abs(Math.sin(index*.72)))) : 3}px`}}/>)}</div>
-            <div className="studio-meter"><span>L</span><div><i style={{width:`${inputLevel*100}%`}}/></div><b>{inputLevel > .8 ? 'PEAK' : `${Math.round(inputLevel*100)}`}</b></div>
-            <div className="transport-controls">{recordingState !== 'recording' ? <button className="main-record" disabled={inputState !== 'listening'} onClick={startRecording}><span/><strong>{recordingState === 'ready' ? '重新录制' : '开始录音'}</strong></button> : <button className="main-stop" onClick={stopRecording}><Square size={19}/><strong>停止录音</strong></button>}</div>
-          </div>
-          {recordingState === 'ready' && recordingUrl && <section className="take-panel"><div><span>当前录音</span><strong>吉他录音 · {String(Math.floor(recordingSeconds/60)).padStart(2,'0')}:{String(recordingSeconds%60).padStart(2,'0')}</strong></div><audio src={recordingUrl} controls/><a href={recordingUrl} download={`guitar-${new Date().toISOString().slice(0,19).replace(/:/g,'-')}.${recordingMime.includes('ogg')?'ogg':recordingMime.includes('mp4')?'m4a':'webm'}`}><Download size={15}/> 下载录音</a><button onClick={clearRecording}><Trash2 size={15}/> 删除</button></section>}
-          {inputState === 'error' && <p className="studio-error">{inputError}</p>}
-          <p className="recorder-tip">录音只保存在当前浏览器中。下载前请不要刷新页面；使用 G5n 时将录制其 USB 输入提供的声音。</p>
-        </section>}
-        {appMode === 'learning' && <div className="learning-toolbar">
-          <div className="learning-view-switch"><button className={learningView==='explore'?'active':''} onClick={()=>setLearningView('explore')}>指板探索</button><button className={learningView==='interval'?'active':''} onClick={()=>setLearningView('interval')}>音程形状</button><button className={learningView==='caged'?'active':''} onClick={()=>setLearningView('caged')}>CAGED</button><button className={learningView==='scales'?'active':''} onClick={()=>setLearningView('scales')}>音阶</button><button className={learningView==='theory'?'active':''} onClick={()=>setLearningView('theory')}>基础乐理</button><button className={learningView==='ear'?'active':''} onClick={()=>setLearningView('ear')}>听音学习</button></div>
-          {learningView === 'ear' && <span className="learning-method">熟悉音色 → 参照对比 → 跨八度识别 → 进入测试</span>}
-        </div>}
+        {appMode === 'drums' && <DrumMachine bpm={drumBpm} drumPlaying={drumPlaying} drumStep={drumStep} metronomePlaying={metronomePlaying} metronomeBeat={metronomeBeat} pattern={drumPattern} onBpmChange={setDrumBpm} onDrumPlayingChange={setDrumPlaying} onMetronomePlayingChange={setMetronomePlaying} onPatternChange={setDrumPattern}/>} 
+        {appMode === 'recorder' && <RecorderStudio inputState={inputState} devices={inputDevices} deviceId={deviceId} inputLevel={inputLevel} inputError={inputError} recordingState={recordingState} recordingUrl={recordingUrl} recordingSeconds={recordingSeconds} recordingMime={recordingMime} onSelectInput={selectInput} onDisconnect={disconnectInput} onStart={startRecording} onStop={stopRecording} onClear={clearRecording}/>} 
+        {appMode === 'learning' && <LearningToolbar view={learningView} onChange={setLearningView}/>}
         {appMode === 'learning' && learningView === 'ear' && <section className="ear-lab">
           <div className="ear-course-nav"><button className={earLesson==='pitch'?'active':''} onClick={()=>setEarLesson('pitch')}><i>01</i><span><strong>音高基础</strong><small>高低、音程距离与八度</small></span></button><button className={earLesson==='relative'?'active':''} onClick={()=>setEarLesson('relative')}><i>02</i><span><strong>相对音感</strong><small>以主音听辨 1–7 级</small></span></button><button className={earLesson==='fretboard'?'active':''} onClick={()=>setEarLesson('fretboard')}><i>03</i><span><strong>指板映射</strong><small>把声音放回吉他指板</small></span></button><button className={`ear-library-tab ${earLesson==='library'?'active':''}`} onClick={()=>setEarLesson('library')}>十二音试听工具</button></div>
           {earLesson === 'pitch' && <div className="ear-course-content"><div className="ear-lab-intro"><span className="lesson-number">LESSON 01 · PITCH</span><h2>先听懂声音的高低与距离</h2><p>不要记音名。先判断声音往上还是往下，并区分半音、全音和八度。</p></div><div className="ear-concept-grid">
@@ -954,11 +731,7 @@ function App() {
             <div className="ear-stage"><span>03 · 听完整半音阶</span><p>连续听十二音如何逐级上行，建立音高方向感。</p><button className="compare-play" onClick={()=>NOTES.forEach((_,index)=>window.setTimeout(()=>playGuitar(5,8+index),index*330))}><Play size={14}/> 播放 C 半音阶</button></div>
           </div></>}
         </section>}
-        {appMode === 'learning' && learningView === 'interval' && <section className="interval-learning-panel">
-          <div className="interval-lesson-copy"><span className="lesson-number">FRETBOARD SHAPES</span><h2>从根音出发，记住目标音的落点</h2><p>绿色是根音，蓝色是目标音。保持手形不变，换到不同把位和音名时，音程关系仍然成立。</p></div>
-          <div className="interval-lesson-controls"><div><span>选择音程</span><div className="interval-choice-grid">{INTERVALS.filter((item) => [3,4,5,7,10,12].includes(item[2] as number)).map(([name,symbol,semitones])=><button key={String(symbol)} className={learningIntervalSemitones===semitones?'active':''} onClick={()=>setLearningIntervalSemitones(semitones as number)}><b>{symbol}</b><small>{name}</small></button>)}</div></div><div><span>相邻弦组合</span><div className="string-pair-choice">{[5,4,3,2,1].map((string)=><button key={string} className={learningIntervalAnchorString===string?'active':''} onClick={()=>setLearningIntervalAnchorString(string)}>{string+1} 弦 → {string} 弦</button>)}</div></div></div>
-          {learningIntervalPair && <div className="interval-explanation"><div><span>当前形状</span><strong>{noteAt(learningIntervalPair.anchor.string, learningIntervalPair.anchor.fret)} → {noteAt(learningIntervalPair.target.string, learningIntervalPair.target.fret)}</strong><small>{INTERVALS.find((item)=>item[2]===learningIntervalSemitones)?.[0]} · {learningIntervalSemitones} 半音</small></div><p>从第 {learningIntervalAnchorString+1} 弦根音到第 {learningIntervalAnchorString} 弦目标音：向高音弦移动 <b>{learningIntervalPair.target.fret - learningIntervalPair.anchor.fret > 0 ? '+' : ''}{learningIntervalPair.target.fret - learningIntervalPair.anchor.fret}</b> 品。{learningIntervalAnchorString===2 ? '注意：3→2 弦是大三度调弦，形状会比其他相邻弦偏移 1 品。' : '其余相邻弦之间是纯四度调弦，可复用同一套形状。'}</p><button onClick={()=>{playGuitar(learningIntervalPair.anchor.string,learningIntervalPair.anchor.fret);window.setTimeout(()=>playGuitar(learningIntervalPair.target.string,learningIntervalPair.target.fret),600)}}><Play size={14}/> 试听两个音</button></div>}
-        </section>}
+        {appMode === 'learning' && learningView === 'interval' && <IntervalLearningPanel intervals={INTERVALS} semitones={learningIntervalSemitones} anchorString={learningIntervalAnchorString} pair={learningIntervalPair} noteAt={noteAt} onSemitonesChange={setLearningIntervalSemitones} onAnchorStringChange={setLearningIntervalAnchorString} onPlay={playGuitar}/>}
         {appMode === 'learning' && learningView === 'caged' && <section className="caged-learning-panel"><div className="caged-intro"><span className="lesson-number">CAGED SYSTEM</span><h2>五个开放和弦，串起整块指板</h2><p>C、A、G、E、D 会沿着指板循环出现。先记住根音所在琴弦，再用横按把形状移动到任何调。</p></div><div className="caged-tabs">{(Object.keys(CAGED_SHAPES) as Array<keyof typeof CAGED_SHAPES>).map((shape)=><button key={shape} className={cagedShape===shape?'active':''} onClick={()=>setCagedShape(shape)}><strong>{shape}</strong><small>{NOTES[CAGED_SHAPES[shape].root]} 大和弦</small></button>)}</div><div className="caged-stage"><div className="caged-diagram"><svg viewBox="0 0 150 190">{Array.from({length:6},(_,i)=><line key={`s${i}`} x1={25+i*20} y1="35" x2={25+i*20} y2="155" className="diagram-string"/>)}{Array.from({length:5},(_,i)=><line key={`f${i}`} x1="25" y1={35+i*30} x2="125" y2={35+i*30} className={i===0?'diagram-nut':'diagram-fret'}/>)}{CAGED_SHAPES[cagedShape].frets.map((fret,i)=>fret===null?<text key={i} x={25+i*20} y="24" className="mute">×</text>:fret===0?<circle key={i} cx={25+i*20} cy="18" r="6" className="open-string"/>:<circle key={i} cx={25+i*20} cy={50+(fret-1)*30} r="8" className={(DIAGRAM_OPEN[i]+fret)%12===CAGED_SHAPES[cagedShape].root?'caged-root-dot':'finger-dot'}/>)}{CAGED_SHAPES[cagedShape].frets.map((fret,i)=>fret===null?null:<text key={`n${i}`} x={25+i*20} y="176" className={(DIAGRAM_OPEN[i]+fret)%12===CAGED_SHAPES[cagedShape].root?'root-name':'tone-name'}>{NOTES[(DIAGRAM_OPEN[i]+fret)%12]}</text>)}</svg></div><div className="caged-copy"><span>{cagedShape} SHAPE · {NOTES[CAGED_SHAPES[cagedShape].root]} MAJOR</span><h3>{NOTES[CAGED_SHAPES[cagedShape].root]} 大三和弦</h3><p>{CAGED_SHAPES[cagedShape].tip}</p><div className="caged-tones"><i>1</i><span>{NOTES[CAGED_SHAPES[cagedShape].root]}</span><i>3</i><span>{NOTES[(CAGED_SHAPES[cagedShape].root+4)%12]}</span><i>5</i><span>{NOTES[(CAGED_SHAPES[cagedShape].root+7)%12]}</span></div><button onClick={()=>CAGED_SHAPES[cagedShape].frets.forEach((fret,i)=>{if(fret!==null)window.setTimeout(()=>playGuitar(5-i,fret),i*42)})}><Play size={15}/> 试听 {NOTES[CAGED_SHAPES[cagedShape].root]} 和弦</button></div></div><div className="caged-flow"><strong>学习顺序</strong><span>开放形状</span><b>→</b><span>找根音</span><b>→</b><span>横按移动</span><b>→</b><span>连接相邻形状</span></div></section>}
         {appMode === 'learning' && learningView === 'caged' && <section className="caged-map-lesson"><div className="caged-map-head"><div><span>ONE CHORD · FIVE WINDOWS</span><h3>同一个 C 大和弦，沿指板有五个观察窗口</h3><p>切换上方形状，看亮点如何沿着指板移动。音名始终是 C、E、G，改变的只是你的手形与根音所在琴弦。</p></div><button onClick={()=>{const shape=CAGED_C_MAJOR[cagedShape];shape.frets.forEach((fret,i)=>{if(fret!==null)window.setTimeout(()=>playGuitar(5-i,fret),i*42)})}}><Play size={14}/> 试听此处 C</button></div><div className="caged-position-track">{(Object.keys(CAGED_C_MAJOR) as Array<keyof typeof CAGED_C_MAJOR>).map((shape,index)=><button key={shape} className={cagedShape===shape?'active':''} onClick={()=>setCagedShape(shape)} style={{'--shape-position':`${[2,22,42,62,82][index]}%`} as React.CSSProperties}><strong>{shape}</strong><small>{CAGED_C_MAJOR[shape].position}</small></button>)}</div><div className="caged-mini-board">{[5,4,3,2,1,0].map((string)=><div key={string} className="caged-mini-string"><span>{6-string} 弦</span>{Array.from({length:15},(_,index)=>{const fret=index+1;const active=CAGED_C_MAJOR[cagedShape].frets[5-string]===fret;const root=active&&(OPEN_MIDI[string]+fret)%12===0;return <i key={fret} className={`${active?'active':''} ${root?'root':''}`}>{active?NOTES[(OPEN_MIDI[string]+fret)%12]:''}</i>})}</div>)}</div><div className="caged-map-explain"><strong>{cagedShape} 形状 · {CAGED_C_MAJOR[cagedShape].position}</strong><span>在 {CAGED_C_MAJOR[cagedShape].rootString} 找到根音 C；其余按点围绕 C、E、G 展开。下一个形状会在更高把位重复同一组音。</span></div></section>}
         {learningCaged && <div className="caged-animation-guide"><div><span>ANIMATED WALKTHROUGH</span><strong>{cagedAnimating ? `正在移动：${cagedShape} 形 · ${CAGED_C_MAJOR[cagedShape].position}` : '播放路径，观察同一组音如何换形不换和弦'}</strong><small>{cagedAnimating ? `绿色根音保持为 C；蓝色 E、G 跟随手形移动。下一步会进入 ${(['C','A','G','E','D'] as Array<keyof typeof CAGED_C_MAJOR>)[((['C','A','G','E','D'] as Array<keyof typeof CAGED_C_MAJOR>).indexOf(cagedShape)+1)%5]} 形。` : '每 1.8 秒切换一个形状，真实指板会同步显示当前把位。'}</small></div><button className={cagedAnimating?'stop':'start'} onClick={()=>setCagedAnimating((value)=>!value)}>{cagedAnimating?<><Square size={14}/> 暂停动画</>:<><Play size={15}/> 播放 CAGED 路径</>}</button></div>}
@@ -1016,115 +789,15 @@ function App() {
             </div>
           </div>}
         </section>}
-        {learningScale && <div className="scale-controls">
-          <label>根音<select value={scaleRoot} onChange={(e) => {stopScalePlayback();setScalePlaybackStart(null);setScalePlaybackError('');setScaleRoot(Number(e.target.value))}}>{NOTES.map((note, index) => <option key={note} value={index}>{note}</option>)}</select></label>
-          <label>音阶<select value={scaleType} onChange={(e) => setScaleType(e.target.value as ScaleType)}>{Object.entries(SCALES).map(([key, scale]) => <option key={key} value={key}>{scale.name}</option>)}</select></label>
-          <button className={scalePlaybackActive ? 'sequence-active' : ''} onClick={scalePlaybackActive ? stopScalePlayback : playCurrentScale}>{scalePlaybackActive ? <><Square size={15}/> 暂停播放</> : <><Play size={15}/> 上行＋下行</>}</button>
-          <div className="scale-bpm"><span>BPM</span><div className="scale-bpm-stepper"><button aria-label="降低 BPM" onClick={()=>commitScalePlaybackBpm(String(scalePlaybackBpm-5))}>−</button><input inputMode="numeric" value={scalePlaybackBpmDraft} onChange={(e)=>setScalePlaybackBpmDraft(e.target.value.replace(/\D/g,''))} onBlur={(e)=>commitScalePlaybackBpm(e.target.value)} onKeyDown={(e)=>{if(e.key==='Enter')e.currentTarget.blur()}} aria-label="播放速度 BPM"/><button aria-label="提高 BPM" onClick={()=>commitScalePlaybackBpm(String(scalePlaybackBpm+5))}>＋</button></div></div>
-          <label className="scale-metronome"><input type="checkbox" checked={scalePlaybackMetronome} onChange={(e)=>setScalePlaybackMetronome(e.target.checked)}/><i/><span>节拍器</span></label>
-          <button className="scale-focus-btn" onClick={scaleFocus ? exitScaleFocus : enterScaleFocus}>{scaleFocus ? <><X size={15}/> 退出全屏</> : <>全屏跟练</>}</button>
-          <button className={scaleSequenceActive ? 'sequence-active' : ''} disabled={!scaleSequence.length} onClick={() => { setScaleSequenceActive(!scaleSequenceActive); setScaleSequenceStep(0) }}>{scaleSequenceActive ? '结束顺序练习' : '开始顺序练习'}</button>
-          <button className="direction-btn" onClick={() => {setScaleDescending(!scaleDescending);setScaleSequenceStep(0)}}>{scaleDescending?'下行':'上行'}</button>
-          <div className="scale-legend"><span><i className="root-dot"/>根音</span><span><i/>音阶音</span></div>
-          {scalePlaybackError && <small className="scale-playback-error">{scalePlaybackError}</small>}
-        </div>}
-        {appMode !== 'theory' && !learningTheory && !learningCaged && appMode !== 'chords' && appMode !== 'recorder' && <div className={`input-panel input-float ${inputState === 'listening' ? 'connected' : ''} ${calibrationOpen ? 'expanded' : ''}`}>
-          <div className="input-symbol">{inputState === 'listening' ? <Mic size={19}/> : <Cable size={19}/>}</div>
-          <div className="input-copy">
-            <strong>{inputState === 'listening' ? '吉他输入已连接' : '使用真实吉他作答'}</strong>
-            <span>{inputState === 'listening' ? (liveFretboardMap ? '实时显示正在弹奏的实际音高位置' : '弹出目标音符即可自动作答') : '连接 USB 声卡或使用设备麦克风'}</span>
-          </div>
-          {inputState === 'listening' && <div className="pitch-monitor">
-            <div className="level"><i style={{width: `${inputLevel * 100}%`}} /></div>
-            <strong className={pitchStable ? 'stable' : ''}>{detectedNote || '—'}</strong><span>{detectedHz ? `${detectedCents > 0 ? '+' : ''}${detectedCents} cent` : '等待声音'}</span>
-          </div>}
-          {inputState === 'listening' && inputDevices.length > 1 && <select value={deviceId} onChange={(e) => void connectInput(e.target.value)} aria-label="输入设备">
-            {inputDevices.map((device, i) => <option value={device.deviceId} key={device.deviceId}>{device.label || `音频输入 ${i + 1}`}</option>)}
-          </select>}
-          <button className="connect-btn" disabled={inputState === 'requesting'} onClick={() => inputState === 'listening' ? stopInput() : void connectInput()}>
-            {inputState === 'listening' ? <><MicOff size={16}/> 断开</> : <><Mic size={16}/> {inputState === 'requesting' ? '连接中…' : '连接输入'}</>}
-          </button>
-          {inputState === 'listening' && <button className={`live-map-btn ${liveFretboardMap ? 'active' : ''}`} onClick={() => setLiveFretboardMap(!liveFretboardMap)}>{liveFretboardMap ? '关闭实时地图' : '开启实时地图'}</button>}
-          {inputState === 'listening' && <button className="calibrate-btn" onClick={() => setCalibrationOpen(!calibrationOpen)}>{calibrationOpen ? '收起' : '校准'}</button>}
-          {inputState === 'error' && <p className="input-error">{inputError}</p>}
-          {inputState === 'listening' && calibrationOpen && <div className="calibration">
-            <div className="tuner">
-              <span>♭</span><div className="tuner-track"><i className="tuner-center"/><b style={{left: `${Math.max(2, Math.min(98, 50 + detectedCents))}%`}} /></div><span>♯</span>
-              <strong>{detectedNote ? (Math.abs(detectedCents) <= 5 ? '音准正确' : detectedCents < 0 ? '音偏低' : '音偏高') : '弹奏一个单音进行测试'}</strong>
-              <small>{detectedHz ? `${detectedHz.toFixed(1)} Hz · ${pitchStable ? '音高稳定' : '正在确认音高'}` : '建议使用干净音色，并逐根弦拨奏'}</small>
-            </div>
-            <label><span>输入灵敏度 <em>{noiseGate <= 7 ? '高' : noiseGate <= 14 ? '中' : '低'}</em></span><input type="range" min="3" max="25" value={noiseGate} onChange={(e) => setNoiseGate(Number(e.target.value))}/><small>环境嘈杂或出现误触时向右调</small></label>
-            <label><span>识别稳定度 <em>{stability <= 5 ? '快速' : stability <= 9 ? '均衡' : '稳定'}</em></span><input type="range" min="4" max="14" value={stability} onChange={(e) => setStability(Number(e.target.value))}/><small>误判较多时向右调，响应会稍慢</small></label>
-          </div>}
-        </div>}
-        {appMode === 'training' && <div className="stats">
-          <div><Timer size={17}/><span>剩余时间</span><strong className={timeLeft <= 10 ? 'danger' : ''}>{timeLeft}<small>秒</small></strong></div>
-          <i />
-          <div><Trophy size={17}/><span>得分</span><strong>{score.toLocaleString()}</strong></div>
-          <i />
-          <div><Flame size={17}/><span>连击</span><strong>{streak}<small>x</small></strong></div>
-        </div>}
+        {learningScale && <ScaleControls notes={NOTES} root={scaleRoot} scales={Object.entries(SCALES).map(([value, scale]) => ({value,name:scale.name}))} scaleType={scaleType} playbackActive={scalePlaybackActive} bpm={scalePlaybackBpm} bpmDraft={scalePlaybackBpmDraft} metronome={scalePlaybackMetronome} focus={scaleFocus} sequenceActive={scaleSequenceActive} sequenceAvailable={Boolean(scaleSequence.length)} descending={scaleDescending} error={scalePlaybackError} onRootChange={(root) => {stopScalePlayback();setScalePlaybackStart(null);setScalePlaybackError('');setScaleRoot(root)}} onScaleTypeChange={(type) => setScaleType(type as ScaleType)} onTogglePlayback={scalePlaybackActive ? stopScalePlayback : playCurrentScale} onBpmDraftChange={setScalePlaybackBpmDraft} onBpmCommit={commitScalePlaybackBpm} onMetronomeChange={setScalePlaybackMetronome} onToggleFocus={scaleFocus ? exitScaleFocus : enterScaleFocus} onToggleSequence={() => {setScaleSequenceActive(!scaleSequenceActive);setScaleSequenceStep(0)}} onToggleDirection={() => {setScaleDescending(!scaleDescending);setScaleSequenceStep(0)}}/>}
+        {appMode !== 'theory' && !learningTheory && !learningCaged && appMode !== 'chords' && appMode !== 'recorder' && <AudioInputPanel state={inputState} devices={inputDevices} deviceId={deviceId} inputLevel={inputLevel} pitchStable={pitchStable} detectedNote={detectedNote} detectedHz={detectedHz} detectedCents={detectedCents} error={inputError} liveMap={liveFretboardMap} calibrationOpen={calibrationOpen} noiseGate={noiseGate} stability={stability} onConnect={selectInput} onDisconnect={disconnectInput} onLiveMapChange={setLiveFretboardMap} onCalibrationOpenChange={setCalibrationOpen} onNoiseGateChange={setNoiseGate} onStabilityChange={setStability}/>} 
+        {appMode === 'training' && <TrainingStats timeLeft={timeLeft} score={score} streak={streak}/>}
 
-        {appMode !== 'theory' && !learningTheory && appMode !== 'chords' && appMode !== 'recorder' && appMode !== 'drums' && !(appMode === 'learning' && learningView === 'ear') && <div className="fretboard-scroll">
-          <div className="fret-numbers" style={{gridTemplateColumns: `var(--fret-label-width, 62px) repeat(${visibleFretCount}, minmax(var(--fret-cell-min, 54px), 1fr))`}}>
-            <span />{Array.from({length: visibleFretCount}, (_, index) => <span key={visibleMinFret + index}>{visibleMinFret + index}</span>)}
-          </div>
-          <div className={`fretboard ${fretboardStyle} ${status === 'finished' ? 'review' : ''} ${appMode === 'learning' && learningView === 'explore' ? 'learning' : ''} ${appMode === 'learning' && learningView === 'interval' ? 'interval-learning' : ''} ${learningCaged ? 'caged-learning' : ''} ${appMode === 'learning' && learningView === 'ear' ? 'ear-learning' : ''} ${learningScale ? 'scale-mode' : ''}`}>
-            {activeStrings.map((active, string) => (
-              <div className={`string-row ${!active && appMode !== 'learning' ? 'disabled' : ''} ${appMode === 'training' && status === 'playing' && ['stringLocate','adaptive','scaleDegree','chordTone'].includes(trainingType) ? (string === targetString ? 'target-string' : 'non-target-string') : ''}`} key={string} style={{gridTemplateColumns: `var(--fret-label-width, 62px) repeat(${visibleFretCount}, minmax(var(--fret-cell-min, 54px), 1fr))`}}>
-                {(() => {
-                  const openNote = noteAt(string, 0)
-                  const openHit = feedback?.string === string && feedback.fret === 0
-                  const openScaleClass = learningScale && scaleNotes.has(openNote) ? (openNote === NOTES[scaleRoot] ? 'scale-root' : 'scale-note') : ''
-                  const openLiveClass = liveFretboardMap && pitchStable && detectedMidi === OPEN_MIDI[string] ? 'live-pitch-position' : ''
-                  const openPlaybackClass = scalePlaybackPosition?.string === string && scalePlaybackPosition.fret === 0 ? 'scale-playing' : ''
-                  const openStartClass = learningScale && openNote === NOTES[scaleRoot] && scalePlaybackStart?.string === string && scalePlaybackStart.fret === 0 ? 'scale-start' : ''
-                  return <button className={`string-label ${openHit ? (feedback.correct ? 'correct' : 'wrong') : ''} ${openScaleClass} ${openLiveClass} ${openPlaybackClass} ${openStartClass}`} disabled={!active && appMode !== 'learning'} onClick={() => learningScale ? (openNote === NOTES[scaleRoot] ? (setScalePlaybackStart({string,fret:0}),setScalePlaybackError(''),stopScalePlayback()) : playGuitar(string, 0)) : choose(string, 0)} title={appMode === 'training' ? `${string + 1}弦空弦` : `${STRING_NAMES[string]} 空弦`}>
-                    <span>{appMode === 'training' ? `${string + 1}弦` : STRING_NAMES[string]}</span>
-                    <b>{appMode === 'learning' || status === 'finished' || openScaleClass || openLiveClass ? openNote : ''}</b>
-                  </button>
-                })()}
-                {Array.from({length: visibleFretCount}, (_, index) => {
-                  const fret = index + visibleMinFret
-                  const hit = feedback?.string === string && feedback.fret === fret
-                  const currentNote = noteAt(string, fret)
-                  const scaleClass = learningScale && scaleNotes.has(currentNote) ? (currentNote === NOTES[scaleRoot] ? 'scale-root' : 'scale-note') : ''
-                  const scalePlaybackClass = scalePlaybackPosition?.string === string && scalePlaybackPosition.fret === fret ? 'scale-playing' : ''
-                  const history = positionStats[`${string}-${fret}`]
-                  const historyTotal = history ? history.correct + history.wrong : 0
-                  const historyRate = historyTotal ? history.correct / historyTotal : 1
-                  const heatClass = status === 'finished' && historyTotal >= 2 ? (historyRate < .5 ? 'heat-weak' : historyRate < .8 ? 'heat-warn' : 'heat-strong') : ''
-                  const questionClass = appMode === 'training' && status === 'playing' && ['identify','octave','interval','intervalShape'].includes(trainingType) && questionPosition.string === string && questionPosition.fret === fret ? 'question-position' : ''
-                  const foundClass = trainingType === 'allNotes' && foundPositions.includes(`${string}-${fret}`) ? 'found-position' : ''
-                  const sequenceIndex = learningScale ? orderedScaleSequence.findIndex((position)=>position.string===string&&position.fret===fret) : -1
-                  const sequenceClass = scaleSequenceActive && sequenceIndex === scaleSequenceStep ? 'sequence-next' : scaleSequenceActive && sequenceIndex > -1 && sequenceIndex < scaleSequenceStep ? 'sequence-done' : ''
-                  const earRevealClass = appMode === 'learning' && learningView === 'ear' && learningEarRevealed && OPEN_MIDI[string]+fret === OPEN_MIDI[learningEarPosition.string]+learningEarPosition.fret ? 'ear-revealed-position' : ''
-                  const intervalAnchorClass = appMode === 'learning' && learningView === 'interval' && learningIntervalPair?.anchor.string === string && learningIntervalPair.anchor.fret === fret ? 'interval-anchor-position' : ''
-                  const intervalTargetClass = appMode === 'learning' && learningView === 'interval' && learningIntervalPair?.target.string === string && learningIntervalPair.target.fret === fret ? 'interval-target-position' : ''
-                  const cagedShapeClass = learningCaged && cagedPositions.has(`${string}-${fret}`) ? ((OPEN_MIDI[string]+fret)%12===0 ? 'caged-root-position' : 'caged-shape-position') : ''
-                  const livePitchClass = liveFretboardMap && pitchStable && detectedMidi === OPEN_MIDI[string] + fret ? 'live-pitch-position' : ''
-                  const arpeggioIndex = trainingType === 'arpeggio' ? arpeggioPath.findIndex((position)=>position.string===string&&position.fret===fret) : -1
-                  const arpeggioClass = arpeggioIndex > -1 ? (arpeggioIndex < arpeggioStep ? 'path-done' : arpeggioIndex === arpeggioStep ? 'path-next' : 'path-future') : ''
-                  const scaleStartClass = learningScale && currentNote === NOTES[scaleRoot] && scalePlaybackStart?.string === string && scalePlaybackStart.fret === fret ? 'scale-start' : ''
-                  return <button key={fret} onClick={() => learningScale ? (currentNote === NOTES[scaleRoot] ? (setScalePlaybackStart({string,fret}), setScalePlaybackError(''), stopScalePlayback()) : handleScaleSequenceClick(string, fret)) : choose(string, fret)} disabled={!active && appMode !== 'learning'} className={`${hit ? (feedback.correct ? 'correct' : 'wrong') : ''} ${scaleClass} ${scalePlaybackClass} ${scaleStartClass} ${heatClass} ${questionClass} ${foundClass} ${sequenceClass} ${earRevealClass} ${intervalAnchorClass} ${intervalTargetClass} ${cagedShapeClass} ${livePitchClass} ${arpeggioClass}`}>
-                    <span className="string-wire" style={{height: `${1 + string * .45}px`}} />
-                    <b>{arpeggioIndex > -1 && arpeggioIndex <= arpeggioStep ? arpeggioIndex+1 : (appMode === 'learning' && (learningView === 'explore' || learningView === 'interval')) || status === 'finished' || hit || scaleClass || scalePlaybackClass || earRevealClass || intervalAnchorClass || intervalTargetClass || cagedShapeClass || livePitchClass ? currentNote : ''}</b>
-                  </button>
-                })}
-              </div>
-            ))}
-            <div className="markers" style={{gridTemplateColumns: `var(--fret-label-width, 62px) repeat(${visibleFretCount}, minmax(var(--fret-cell-min, 54px), 1fr))`}}>
-              <span />{Array.from({length: visibleFretCount}, (_, index) => { const fret = index + visibleMinFret; return <span key={fret}>{MARKERS.has(fret) && <i className={fret === 12 ? 'double' : ''}/>}</span> })}
-            </div>
-          </div>
-        </div>}
+        {appMode !== 'theory' && !learningTheory && appMode !== 'chords' && appMode !== 'recorder' && appMode !== 'drums' && !(appMode === 'learning' && learningView === 'ear') && <Fretboard appMode={appMode} status={status} trainingType={trainingType} style={fretboardStyle} activeStrings={activeStrings} stringNames={STRING_NAMES} minFret={visibleMinFret} fretCount={visibleFretCount} targetString={targetString} feedback={feedback} learningView={learningView} learningScale={learningScale} learningCaged={learningCaged} scaleRootNote={NOTES[scaleRoot]} scaleNotes={scaleNotes} scaleSequenceActive={scaleSequenceActive} scaleSequenceStep={scaleSequenceStep} orderedScaleSequence={orderedScaleSequence} scalePlaybackPosition={scalePlaybackPosition} scalePlaybackStart={scalePlaybackStart} liveFretboardMap={liveFretboardMap} pitchStable={pitchStable} detectedMidi={detectedMidi} openMidi={OPEN_MIDI} positionStats={positionStats} questionPosition={questionPosition} foundPositions={foundPositions} learningEarRevealed={learningEarRevealed} learningEarPosition={learningEarPosition} learningIntervalPair={learningIntervalPair} cagedPositions={cagedPositions} arpeggioPath={arpeggioPath} arpeggioStep={arpeggioStep} noteAt={noteAt} onChoose={choose} onScaleClick={handleScaleSequenceClick} onPlay={playGuitar} onSelectScaleStart={({string,fret})=>{setScalePlaybackStart({string,fret});setScalePlaybackError('');stopScalePlayback()}}/>}
 
         {appMode === 'training' && status === 'playing' && trainingType === 'identify' && <div className="note-answers">{NOTES.map((note) => <button key={note} onClick={() => answerIdentification(note)}>{note}</button>)}</div>}
 
-        {appMode === 'training' && status === 'finished' && <section className="weak-review">
-          <div className="weak-review-head"><div><span>长期学习记录</span><h3>薄弱位置</h3></div><div className="heat-legend"><span><i className="good"/>熟练</span><span><i className="medium"/>待加强</span><span><i className="weak"/>薄弱</span></div></div>
-          {weakPositions.length ? <div className="weak-list">{weakPositions.map((item, index) => <div key={`${item.string}-${item.fret}`}><strong>#{index + 1}</strong><span>{item.string + 1}弦 · {item.fret === 0 ? '空弦' : `${item.fret}品`}</span><b>{noteAt(item.string, item.fret)}</b><em>{item.accuracy}%</em><small>{item.correct} 对 / {item.wrong} 错 · {item.averageMs ? `${(item.averageMs/1000).toFixed(1)}秒` : '待测速'}</small></div>)}</div> : <p className="no-history">继续完成几次训练后，这里会显示你最容易出错的指板位置。</p>}
-        </section>}
+        {appMode === 'training' && status === 'finished' && <WeakReview positionStats={positionStats} noteAt={noteAt}/>}
 
         {appMode !== 'theory' && !learningTheory && !learningCaged && appMode !== 'chords' && appMode !== 'recorder' && appMode !== 'drums' && !(appMode === 'learning' && learningView === 'ear') && <div className="game-actions">
           {appMode === 'training' && status === 'idle' && <><button className="primary" onClick={startGame}>开始训练 <span>60 秒</span></button><button className="focus-launch" onClick={enterFocusTraining}>全屏训练</button></>}
@@ -1138,40 +811,7 @@ function App() {
 
       <footer><span>标准调弦 · E A D G B E</span><span>每天 10 分钟，你也能成为吉他大师</span></footer>
 
-      {settingsOpen && <div className="modal-backdrop" onMouseDown={() => setSettingsOpen(false)}>
-        <aside className="modal" onMouseDown={(e) => e.stopPropagation()}>
-          <button className="modal-close" onClick={() => setSettingsOpen(false)}><X size={20}/></button>
-          <div className="modal-icon"><Settings2 size={21}/></div><h2>训练设置</h2><p>控制本局出现的指板范围</p>
-          <label className="field-label">练习范围 <strong>{minFret} – {maxFret} 品</strong></label>
-          <div className="dual-fret-range"><div className="dual-range-track" style={{background:`linear-gradient(90deg,#303630 0 ${((minFret-1)/17)*100}%,#b8ee50 ${((minFret-1)/17)*100}% ${((maxFret-1)/17)*100}%,#303630 ${((maxFret-1)/17)*100}% 100%)`}}/><input aria-label="起始品" type="range" min="1" max="18" value={minFret} onChange={(e) => setMinFret(Math.min(Number(e.target.value), maxFret - 1))}/><input aria-label="结束品" type="range" min="1" max="18" value={maxFret} onChange={(e) => setMaxFret(Math.max(Number(e.target.value), minFret + 1))}/><div className="dual-range-values"><span>起始 <b>{minFret}</b></span><span>结束 <b>{maxFret}</b></span></div></div>
-          <label className="field-label board-style-title">指板外观</label>
-          <div className="board-style-options">
-            <button className={fretboardStyle === 'practice' ? 'selected' : ''} onClick={() => setFretboardStyle('practice')}>
-              <span className="style-preview practice-preview"><i/><i/><i/></span><strong>训练模式</strong><small>高对比，更容易定位</small>
-            </button>
-            <button className={fretboardStyle === 'realistic' ? 'selected' : ''} onClick={() => setFretboardStyle('realistic')}>
-              <span className="style-preview wood-preview"><i/><i/><i/></span><strong>玫瑰木</strong><small>经典深棕色木纹</small>
-            </button>
-            <button className={fretboardStyle === 'ebony' ? 'selected' : ''} onClick={() => setFretboardStyle('ebony')}>
-              <span className="style-preview ebony-preview"><i/><i/><i/></span><strong>乌木</strong><small>近黑色，纹理细密</small>
-            </button>
-            <button className={fretboardStyle === 'maple' ? 'selected' : ''} onClick={() => setFretboardStyle('maple')}>
-              <span className="style-preview maple-preview"><i/><i/><i/></span><strong>枫木</strong><small>浅黄明亮木色</small>
-            </button>
-          </div>
-          <label className="field-label strings-title">参与练习的弦</label>
-          <div className="string-toggles">{STRING_NAMES.map((name, i) => <button key={name} className={activeStrings[i] ? 'selected' : ''} onClick={() => {
-            if (activeStrings.filter(Boolean).length === 1 && activeStrings[i]) return
-            setActiveStrings((all) => all.map((v, j) => j === i ? !v : v))
-          }}>{name}</button>)}</div>
-          <button className="clear-cache" onClick={() => {
-            localStorage.removeItem(PREFERENCES_KEY)
-            localStorage.removeItem('fretquest.positionStats.v1')
-            window.location.reload()
-          }}><Trash2 size={15}/> 清空本地缓存并恢复默认</button>
-          <button className="primary modal-save" onClick={() => setSettingsOpen(false)}>保存设置</button>
-        </aside>
-      </div>}
+      {settingsOpen && <SettingsModal minFret={minFret} maxFret={maxFret} fretboardStyle={fretboardStyle} activeStrings={activeStrings} stringNames={STRING_NAMES} onMinFretChange={setMinFret} onMaxFretChange={setMaxFret} onFretboardStyleChange={setFretboardStyle} onToggleString={(index) => {if(activeStrings.filter(Boolean).length===1&&activeStrings[index])return;setActiveStrings((all)=>all.map((value,current)=>current===index?!value:value))}} onClearCache={() => {clearLearningData();window.location.reload()}} onClose={() => setSettingsOpen(false)}/>} 
     </main>
   )
 }
