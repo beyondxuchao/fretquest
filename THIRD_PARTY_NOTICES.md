@@ -10,7 +10,7 @@ The original approach includes chromatic tone mapping, recursive fret-position
 search, chord-tone integrity filtering, fingering constraints, root-bass
 filtering, and chord-diagram visualization. The implementation in this project
 has been adapted to TypeScript, React, the current standard-tuning model, and
-the FretQuest user interface.
+the FretSeek user interface.
 
 ## FluidR3 GM acoustic guitar samples
 
