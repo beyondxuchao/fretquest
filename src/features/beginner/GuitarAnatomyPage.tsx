@@ -27,6 +27,12 @@ const PARTS: GuitarPart[] = [
 ]
 
 const GUITAR_LAYER_IDS = ['q1shadowright', 'q2', 'q3', 'q4', 'q5', 'q6', 'q7', 'q8', 'q9', 'q10topright', 'q11topleft']
+const PART_ANCHORS:Record<string,[number,number]>={headstock:[276,85],tuners:[302,108],nut:[246,163],neck:[255,300],fretboard:[220,360],frets:[205,375],strings:[188,620],body:[120,700],soundhole:[208,548],bridge:[190,694]}
+const STRING_PATHS=[
+  '247.2,84.9 230.1,162.4 169.7,683.8 168.9,695.7','244.3,111 234.4,162.6 175.5,683.9 174.7,697.1','244.6,137.7 240.4,162.8 182.3,685.9 181.9,699.1',
+  '274.4,82.8 246.4,162.1 189.4,688.3 188.9,700.6','268.1,107.2 251.5,162.3 197.6,691.1 197.2,702.4','266,133.7 256.7,163 204.8,692.3 204.2,704.2',
+]
+const FRET_LINES=[[232.2,514.7,187.6,509],[233,504.7,188.5,499.2],[234.6,493.1,189.9,488.2],[235.5,481.2,191.3,476.2],[236.9,468.9,192.7,464.5],[237.6,454.8,194.1,451],[239,441,195.7,437.8],[240.1,426.3,197.4,423.4],[242.2,410.1,199.2,407.8],[243.4,393.8,200.9,391.5],[244.8,375.4,203,374.2],[246.7,356.8,205.3,355.4],[248.1,336.4,207.6,336.1],[250.4,315.7,209.9,315.2],[252.2,292.8,212.7,292.6],[253.9,270,215.3,269.8],[256.5,245.9,218.3,245.6],[258.8,220.3,221.1,220.3],[261.5,192.8,224.4,192.6]]
 
 type Props = { onNext?: () => void }
 
@@ -35,14 +41,7 @@ export function GuitarAnatomyPage({ onNext }: Props) {
   const [playing, setPlaying] = useState(false)
   const activePart = PARTS[activeIndex]
   const progress = useMemo(() => ((activeIndex + 1) / PARTS.length) * 100, [activeIndex])
-  const calloutX = (activePart.x + activePart.width) * 6
-  const calloutY = (activePart.y + activePart.height / 2) * 8.26
-  const highlightX = activePart.x * 6
-  const highlightY = activePart.y * 8.26
-  const highlightWidth = activePart.width * 6
-  const highlightHeight = activePart.height * 8.26
-  const highlightCenterX = highlightX + highlightWidth / 2
-  const highlightCenterY = highlightY + highlightHeight / 2
+  const [calloutX,calloutY]=PART_ANCHORS[activePart.id]
 
   useEffect(() => {
     if (!playing) return
@@ -67,30 +66,26 @@ export function GuitarAnatomyPage({ onNext }: Props) {
           <div className="guitar-reference-canvas">
           <svg className="guitar-reference-svg" viewBox="0 0 600 826" role="img" aria-label="竖直放置的古典吉他真实结构图">
             <defs>
-              <clipPath id="active-guitar-part">
-                <ellipse cx={highlightCenterX} cy={highlightCenterY} rx={highlightWidth * .62} ry={highlightHeight * .62}/>
-              </clipPath>
               <filter id="active-part-glow" x="-40%" y="-40%" width="180%" height="180%">
-                <feDropShadow dx="0" dy="0" stdDeviation="8" floodColor="#d7ff75" floodOpacity=".82"/>
+                <feDropShadow dx="0" dy="0" stdDeviation="5" floodColor="#d7ff75" floodOpacity=".9"/>
               </filter>
             </defs>
             <g className="guitar-reference-base">
               {GUITAR_LAYER_IDS.map((id) => <use key={id} href={`/assets/acoustic-guitar-reference.svg#${id}`}/>) }
             </g>
-            <g clipPath="url(#active-guitar-part)" className="guitar-reference-focus" filter="url(#active-part-glow)"
-              transform={`translate(${highlightCenterX} ${highlightCenterY}) scale(1.1) translate(${-highlightCenterX} ${-highlightCenterY})`}>
-              {GUITAR_LAYER_IDS.map((id) => <use key={`focus-${id}`} href={`/assets/acoustic-guitar-reference.svg#${id}`}/>) }
+            <g className={`anatomy-exact-highlight highlight-${activePart.id}`} filter="url(#active-part-glow)">
+              {activePart.id==='headstock'&&<use href="/assets/acoustic-guitar-reference.svg#q9"/>}
+              {activePart.id==='neck'&&<use href="/assets/acoustic-guitar-reference.svg#q2"/>}
+              {activePart.id==='body'&&<><use href="/assets/acoustic-guitar-reference.svg#q4"/><use href="/assets/acoustic-guitar-reference.svg#q5"/><ellipse className="body-soundhole-cutout" cx="208" cy="548.5" rx="38.6" ry="48.2"/></>}
+              {activePart.id==='fretboard'&&<polygon points="264.1,163.8 230.9,531 185.3,525.1 227.4,163.6"/>}
+              {activePart.id==='nut'&&<line x1="227.5" y1="163" x2="264" y2="163"/>}
+              {activePart.id==='soundhole'&&<ellipse cx="208" cy="548.5" rx="38.6" ry="48.2"/>}
+              {activePart.id==='bridge'&&<polygon points="245.9,695.9 244.3,718.8 138.5,692.3 139.7,670.1"/>}
+              {activePart.id==='strings'&&STRING_PATHS.map((points,index)=><polyline key={index} points={points}/>)}
+              {activePart.id==='frets'&&FRET_LINES.map((line,index)=><line key={index} x1={line[0]} y1={line[1]} x2={line[2]} y2={line[3]}/>)}
+              {activePart.id==='tuners'&&[[248.9,85.3],[246.7,111.4],[243.9,138.2],[275.6,83.5],[270.2,108.4],[264,133.5]].map(([cx,cy],index)=><circle key={index} cx={cx} cy={cy} r="7"/>)}
             </g>
           </svg>
-          <div className="guitar-hotspots" aria-label="吉他部件选择">
-            {PARTS.map((part, index) => <button
-              key={part.id}
-              className={index === activeIndex ? 'active' : ''}
-              style={{ left: `${part.x}%`, top: `${part.y}%`, width: `${part.width}%`, height: `${part.height}%` }}
-              onClick={() => go(index)}
-              aria-label={part.name}
-            />)}
-          </div>
           <svg className="guitar-callout-overlay" viewBox="0 0 600 826" aria-hidden="true">
             <line x1={calloutX} y1={calloutY} x2="430" y2={calloutY}/>
             <circle cx={calloutX} cy={calloutY} r="6"/>
