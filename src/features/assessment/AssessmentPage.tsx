@@ -2,7 +2,7 @@ import { BarChart3, Brain, Headphones, MapPin, Play, RotateCcw } from 'lucide-re
 import type { PracticeProfile, StageResult } from '../../lib/practiceProfile'
 
 type Props={profile:PracticeProfile;result:StageResult[]|null;onStart:()=>void;onContinue:()=>void;onSkip:()=>void}
-const LABELS:Record<string,string>={locate:'音名定位',identify:'反向识别',stringLocate:'指定弦定位',positionAssessment:'把位覆盖',octave:'八度关系',earLocate:'听音定位'}
+const LABELS:Record<string,string>={locate:'音名定位',identify:'反向识别',stringLocate:'指定弦定位',positionAssessment:'把位覆盖',octave:'八度关系',interval:'核心音程',earLocate:'听音定位'}
 
 export function AssessmentPage({profile,result,onStart,onContinue,onSkip}:Props){
   if(result){
@@ -16,9 +16,9 @@ export function AssessmentPage({profile,result,onStart,onContinue,onSkip}:Props)
     </section>
   }
   return <section className="assessment-page">
-    <div className="assessment-intro"><span>INITIAL SKILL CHECK</span><h2>{profile.assessmentCompleted?'重新进行能力诊断':'先用 5 分钟了解你的当前水平'}</h2><p>六项测试各 50 秒，包括前、中、高把位覆盖。不会因为答错而中断，请尽量快速、自然地作答。</p></div>
-    <div className="assessment-features"><div><MapPin/><strong>视觉与把位定位</strong><span>音名、指定琴弦与 1–12 品覆盖</span></div><div><Brain/><strong>关系理解</strong><span>八度形状与空间记忆</span></div><div><Headphones/><strong>听觉映射</strong><span>听到声音后找到实际位置</span></div></div>
+    <div className="assessment-intro"><span>SKILL CHECK</span><h2>{profile.assessmentCompleted?'重新进行能力诊断':'用 35 道题了解你的当前水平'}</h2><p>七项测试每项固定 5 题，答完再进入下一项。把位测试会覆盖前、中、高三个区域。</p></div>
+    <div className="assessment-features"><div><MapPin/><strong>视觉与把位定位</strong><span>音名、指定琴弦与 1–12 品覆盖</span></div><div><Brain/><strong>关系理解</strong><span>八度形状与二度、三度、五度、八度</span></div><div><Headphones/><strong>听觉映射</strong><span>听到声音后找到实际位置</span></div></div>
     <div className="assessment-notice"><RotateCcw size={17}/><span>清除本地缓存后会重新进入本次诊断，因为原有学习档案也会被删除。</span></div>
-    <div className="assessment-actions"><button className="assessment-primary" onClick={onStart}><Play size={17}/> 开始 5 分钟诊断</button><button className="assessment-skip" onClick={onSkip}>我是纯新手，先去学习</button></div>
+    <div className="assessment-actions"><button className="assessment-primary" onClick={onStart}><Play size={17}/> 开始 35 题诊断</button><button className="assessment-skip" onClick={onSkip}>我是纯新手，先去学习</button></div>
   </section>
 }

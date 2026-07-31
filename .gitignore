@@ -1,1 +1,4 @@
 server/rmvpe.pt
+node_modules/
+dist/
+*.tsbuildinfo

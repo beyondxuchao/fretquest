@@ -12,20 +12,22 @@ const DETAILS:Record<TrainingType,{title:string;description:string}>={
 }
 
 export const ASSESSMENT_STAGES:DailyStage[]=[
-  {type:'locate',...DETAILS.locate,minutes:5/6},
-  {type:'identify',...DETAILS.identify,minutes:5/6},
-  {type:'stringLocate',...DETAILS.stringLocate,minutes:5/6},
-  {type:'positionAssessment',...DETAILS.positionAssessment,minutes:5/6},
-  {type:'octave',...DETAILS.octave,minutes:5/6},
-  {type:'earLocate',...DETAILS.earLocate,minutes:5/6},
+  {type:'locate',...DETAILS.locate,minutes:1},
+  {type:'identify',...DETAILS.identify,minutes:1},
+  {type:'stringLocate',...DETAILS.stringLocate,minutes:1},
+  {type:'positionAssessment',...DETAILS.positionAssessment,minutes:1},
+  {type:'octave',...DETAILS.octave,minutes:1},
+  {type:'interval',...DETAILS.interval,minutes:1},
+  {type:'earLocate',...DETAILS.earLocate,minutes:1},
 ]
 
 export const DEFAULT_DAILY_PLAN:DailyStage[]=[
   {type:'adaptive',...DETAILS.adaptive,minutes:2},
   {type:'stringLocate',...DETAILS.stringLocate,minutes:2},
   {type:'octave',...DETAILS.octave,minutes:2},
-  {type:'scaleDegree',...DETAILS.scaleDegree,minutes:2},
-  {type:'earLocate',...DETAILS.earLocate,minutes:2},
+  {type:'interval',...DETAILS.interval,minutes:1},
+  {type:'scaleDegree',...DETAILS.scaleDegree,minutes:1.5},
+  {type:'earLocate',...DETAILS.earLocate,minutes:1.5},
 ]
 
 export function loadPracticeProfile():PracticeProfile{
@@ -44,12 +46,12 @@ export function buildDailyPlan(weakness:PracticeProfile['weakness'],positionStat
   const positionAttempts=positionValues.reduce((sum,item)=>sum+item.correct+item.wrong,0)
   const positionError=positionAttempts?positionValues.reduce((sum,item)=>sum+item.wrong,0)/positionAttempts:.5
   const slowScore=positionValues.length?positionValues.reduce((sum,item)=>sum+Math.min(1,(item.averageMs||2500)/5000),0)/positionValues.length:.5
-  const types:TrainingType[]=['adaptive','stringLocate','octave','scaleDegree','earLocate']
+  const types:TrainingType[]=['adaptive','stringLocate','octave','interval','scaleDegree','earLocate']
   const weights=types.map((type)=>{
     if(type==='adaptive')return Math.max(.15,(weakness.adaptive??weakness.positionAssessment??weakness.locate??.45)*.35+(weakness.identify||.45)*.15+(weakness.positionAssessment||.45)*.15+positionError*.2+slowScore*.15)
     return Math.max(.15,weakness[type]??.45)
   })
-  const flexibleSeconds=300,totalWeight=weights.reduce((sum,value)=>sum+value,0)
+  const flexibleSeconds=240,totalWeight=weights.reduce((sum,value)=>sum+value,0)
   const seconds=weights.map((weight)=>60+Math.round((flexibleSeconds*weight/totalWeight)/15)*15)
   let difference=600-seconds.reduce((sum,value)=>sum+value,0)
   while(difference!==0){const index=difference>0?weights.indexOf(Math.max(...weights)):seconds.indexOf(Math.max(...seconds));const change=Math.sign(difference)*Math.min(15,Math.abs(difference));seconds[index]+=change;difference-=change}

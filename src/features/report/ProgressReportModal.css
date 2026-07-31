@@ -1,0 +1,28 @@
+.progress-report .report-review-board {
+  --fret-label-width: 54px;
+  --fret-cell-min: 44px;
+  margin: 0;
+  padding: 0 0 4px;
+}
+
+.progress-report .report-review-board .fretboard {
+  min-width: 650px;
+}
+
+.progress-report .report-review-board .string-row {
+  height: 38px;
+}
+
+.progress-report .report-review-board button {
+  pointer-events: none;
+}
+
+.progress-report .report-board-head .heat-legend {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 700px) {
+  .progress-report .report-review-board .fretboard {
+    min-width: 620px;
+  }
+}
