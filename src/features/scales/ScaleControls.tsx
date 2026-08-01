@@ -1,4 +1,5 @@
 import { Play, Square, X } from 'lucide-react'
+import { formatActiveNote } from '../../lib/noteNotation'
 
 type ScaleOption = { value: string; name: string }
 
@@ -52,7 +53,7 @@ export function ScaleControls({
   onToggleDirection,
 }: ScaleControlsProps) {
   return <div className="scale-controls">
-    <label>根音<select value={root} onChange={(event) => onRootChange(Number(event.target.value))}>{notes.map((note, index) => <option key={note} value={index}>{note}</option>)}</select></label>
+    <label>根音<select value={root} onChange={(event) => onRootChange(Number(event.target.value))}>{notes.map((note, index) => <option key={note} value={index}>{formatActiveNote(note)}</option>)}</select></label>
     <label>音阶<select value={scaleType} onChange={(event) => onScaleTypeChange(event.target.value)}>{scales.map((scale) => <option key={scale.value} value={scale.value}>{scale.name}</option>)}</select></label>
     <button className={playbackActive ? 'sequence-active' : ''} onClick={onTogglePlayback}>{playbackActive ? <><Square size={15}/> 暂停播放</> : <><Play size={15}/> 上行＋下行</>}</button>
     <div className="scale-bpm"><span>BPM</span><div className="scale-bpm-stepper"><button aria-label="降低 BPM" onClick={() => onBpmCommit(String(bpm - 5))}>−</button><input inputMode="numeric" value={bpmDraft} onChange={(event) => onBpmDraftChange(event.target.value.replace(/\D/g, ''))} onBlur={(event) => onBpmCommit(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur() }} aria-label="播放速度 BPM"/><button aria-label="提高 BPM" onClick={() => onBpmCommit(String(bpm + 5))}>＋</button></div></div>

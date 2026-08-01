@@ -1,5 +1,6 @@
 import { ArrowLeft, Pause, Play, Volume2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { formatActiveNote } from '../../lib/noteNotation'
 
 const NATURAL_NOTES = [
   { note: 'C', solfege: 'Do', number: '1', color: '#ef767a', fret: 8 },
@@ -61,12 +62,12 @@ export function NoteNamesLessonPage({ onBack, onNext, onPlay }: Props) {
     <div className="note-lesson-stage">
       <div className="natural-note-strip">
         {NATURAL_NOTES.map((item, index) => <button key={item.note} className={index === activeIndex ? 'active' : ''} style={{ '--note-color': item.color } as React.CSSProperties} onClick={() => playNote(index)}>
-          <strong>{item.note}</strong><span>{item.solfege}</span><small>{item.number}</small><Volume2 size={13}/>
+          <strong>{formatActiveNote(item.note)}</strong><span>{item.solfege}</span><small>{item.number}</small><Volume2 size={13}/>
         </button>)}
       </div>
 
       <div className="active-note-explain">
-        <div className="active-note-symbol" style={{ '--note-color': active.color } as React.CSSProperties}><b>{active.note}</b><small>{active.number}</small></div>
+        <div className="active-note-symbol" style={{ '--note-color': active.color } as React.CSSProperties}><b>{formatActiveNote(active.note)}</b><small>{active.number}</small></div>
         <div><span>这个音的固定对应</span><h3>{active.note} = {active.solfege} = {active.number}</h3><p>看到字母 <b>{active.note}</b>，固定唱名读作 <b>{active.solfege}</b>，数字简谱写作 <b>{active.number}</b>。</p><button onClick={() => onPlay(5, active.fret)}><Volume2 size={15}/>听 {active.note} · {active.solfege}</button></div>
       </div>
 

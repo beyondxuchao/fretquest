@@ -1,6 +1,7 @@
 import { ArrowLeft, Pause, Play, SkipBack, SkipForward, Volume2 } from 'lucide-react'
 import type { ReactElement, ReactNode } from 'react'
 import { cloneElement, isValidElement, useEffect, useMemo, useState } from 'react'
+import { formatActiveNote } from '../../lib/noteNotation'
 
 const NOTES=['C','C♯','D','D♯','E','F','F♯','G','G♯','A','A♯','B']
 const SOLFEGE:Record<string,string>={C:'Do',D:'Re',E:'Mi',F:'Fa',G:'Sol',A:'La',B:'Si'}
@@ -67,20 +68,20 @@ export function OneStringNotesLessonPage({ onBack, onNext, onPlay, renderFretboa
       <i>+</i>
       <div><span>移动规则</span><strong>每前进一品升高半音</strong></div>
       <i>=</i>
-      <div><span>终点</span><strong>12 品回到高八度 {NOTES[OPEN_NOTES[activeString]]}</strong></div>
+      <div><span>终点</span><strong>12 品回到高八度 {formatActiveNote(NOTES[OPEN_NOTES[activeString]])}</strong></div>
     </div>
 
-    <div className="chromatic-string-selector"><div><span>选择一根弦观察</span><strong>{STRING_LABELS[activeString]}</strong></div><div>{STRING_LABELS.map((label,string)=><button key={label} className={activeString===string?'active':''} onClick={()=>chooseString(string)}><b>{string+1}</b><span>{NOTES[OPEN_NOTES[string]]}</span></button>)}</div></div>
+    <div className="chromatic-string-selector"><div><span>选择一根弦观察</span><strong>{STRING_LABELS[activeString]}</strong></div><div>{STRING_LABELS.map((label,string)=><button key={label} className={activeString===string?'active':''} onClick={()=>chooseString(string)}><b>{string+1}</b><span>{formatActiveNote(NOTES[OPEN_NOTES[string]])}</span></button>)}</div></div>
 
     <div className="one-string-route">
       {naturalNotes.map((item, index) => <button key={`${item.note}-${item.fret}`} className={index === activeIndex ? 'active' : ''} onClick={() => selectIndex(index)}>
-        <small>{item.fret === 0 ? '空弦' : `${item.fret} 品`}</small><strong>{item.note}</strong><span>{item.solfege}</span>
+        <small>{item.fret === 0 ? '空弦' : `${item.fret} 品`}</small><strong>{formatActiveNote(item.note)}</strong><span>{item.solfege}</span>
         {index < naturalNotes.length - 1 && <i>{naturalNotes[index + 1].fret - item.fret === 1 ? '半音' : '全音'}</i>}
       </button>)}
     </div>
 
     <div className="one-string-focus">
-      <div><span>当前音</span><b>{active.note}</b><small>{active.solfege}</small></div>
+      <div><span>当前音</span><b>{formatActiveNote(active.note)}</b><small>{active.solfege}</small></div>
       <div><h3>{STRING_LABELS[activeString].split(' · ')[0]} · {active.fret === 0 ? '空弦' : `${active.fret} 品`}</h3><p>{active.fret === 0 ? `这条自然音路线从 ${active.note} 开始。` : `从空弦 ${NOTES[OPEN_NOTES[activeString]]} 向琴身移动 ${active.fret} 品，到达 ${active.note}。`}</p><button onClick={() => onPlay(activeString, active.fret)}><Volume2 size={15}/>试听 {active.note}</button></div>
       <div className="one-string-controls"><button onClick={() => selectIndex(activeIndex - 1)} disabled={activeIndex === 0}><SkipBack size={16}/></button><button onClick={() => { if (!playing) setActiveIndex(0); setPlaying((value) => !value) }}>{playing ? <Pause size={16}/> : <Play size={16}/>}</button><button onClick={() => selectIndex(activeIndex + 1)} disabled={activeIndex === naturalNotes.length - 1}><SkipForward size={16}/></button></div>
     </div>

@@ -1,5 +1,5 @@
 import { Settings2, Trash2, X } from 'lucide-react'
-import type { FretboardStyle } from '../../types'
+import type { FretboardStyle, NoteNotation } from '../../types'
 
 type SettingsModalProps = {
   minFret: number
@@ -7,10 +7,12 @@ type SettingsModalProps = {
   fretboardStyle: FretboardStyle
   activeStrings: boolean[]
   stringNames: readonly string[]
+  noteNotation: NoteNotation
   onMinFretChange: (value: number) => void
   onMaxFretChange: (value: number) => void
   onFretboardStyleChange: (style: FretboardStyle) => void
   onToggleString: (index: number) => void
+  onNoteNotationChange: (notation: NoteNotation) => void
   onClearCache: () => void
   onClose: () => void
 }
@@ -22,7 +24,7 @@ const BOARD_STYLES: Array<{value:FretboardStyle;preview:string;name:string;descr
   {value:'maple',preview:'maple-preview',name:'枫木',description:'浅黄明亮木色'},
 ]
 
-export function SettingsModal({ minFret, maxFret, fretboardStyle, activeStrings, stringNames, onMinFretChange, onMaxFretChange, onFretboardStyleChange, onToggleString, onClearCache, onClose }: SettingsModalProps) {
+export function SettingsModal({ minFret, maxFret, fretboardStyle, activeStrings, stringNames, noteNotation, onMinFretChange, onMaxFretChange, onFretboardStyleChange, onToggleString, onNoteNotationChange, onClearCache, onClose }: SettingsModalProps) {
   return <div className="modal-backdrop" onMouseDown={onClose}>
     <aside className="modal" onMouseDown={(event) => event.stopPropagation()}>
       <button className="modal-close" onClick={onClose}><X size={20}/></button>
@@ -31,6 +33,8 @@ export function SettingsModal({ minFret, maxFret, fretboardStyle, activeStrings,
       <div className="dual-fret-range"><div className="dual-range-track" style={{background:`linear-gradient(90deg,#303630 0 ${((minFret-1)/17)*100}%,#b8ee50 ${((minFret-1)/17)*100}% ${((maxFret-1)/17)*100}%,#303630 ${((maxFret-1)/17)*100}% 100%)`}}/><input aria-label="起始品" type="range" min="1" max="18" value={minFret} onChange={(event) => onMinFretChange(Math.min(Number(event.target.value), maxFret - 1))}/><input aria-label="结束品" type="range" min="1" max="18" value={maxFret} onChange={(event) => onMaxFretChange(Math.max(Number(event.target.value), minFret + 1))}/><div className="dual-range-values"><span>起始 <b>{minFret}</b></span><span>结束 <b>{maxFret}</b></span></div></div>
       <label className="field-label board-style-title">指板外观</label>
       <div className="board-style-options">{BOARD_STYLES.map((style) => <button key={style.value} className={fretboardStyle === style.value ? 'selected' : ''} onClick={() => onFretboardStyleChange(style.value)}><span className={`style-preview ${style.preview}`}><i/><i/><i/></span><strong>{style.name}</strong><small>{style.description}</small></button>)}</div>
+      <label className="field-label notation-title">音符显示</label>
+      <div className="notation-options"><button className={noteNotation==='letter'?'selected':''} onClick={()=>onNoteNotationChange('letter')}><strong>C D E F G A B</strong><small>音名</small></button><button className={noteNotation==='number'?'selected':''} onClick={()=>onNoteNotationChange('number')}><strong>1 2 3 4 5 6 7</strong><small>简谱数字</small></button></div>
       <label className="field-label strings-title">参与练习的弦</label>
       <div className="string-toggles">{stringNames.map((name,index) => <button key={name} className={activeStrings[index] ? 'selected' : ''} onClick={() => onToggleString(index)}>{name}</button>)}</div>
       <button className="clear-cache" onClick={onClearCache}><Trash2 size={15}/> 清空本地缓存并恢复默认</button>

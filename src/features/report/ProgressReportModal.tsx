@@ -2,6 +2,7 @@ import { BarChart3, CheckCircle2, CircleAlert, X } from 'lucide-react'
 import type { PracticeProfile } from '../../lib/practiceProfile'
 import type { FretboardStyle, PositionStats, TrainingType } from '../../types'
 import './ProgressReportModal.css'
+import { formatActiveNote } from '../../lib/noteNotation'
 
 type Props={profile:PracticeProfile;positionStats:PositionStats;fretboardStyle:FretboardStyle;onClose:()=>void}
 
@@ -22,14 +23,14 @@ function ReviewFretboard({positionStats,style}:{positionStats:PositionStats;styl
     <div className="fret-numbers" style={{gridTemplateColumns:GRID_TEMPLATE}}><span/>{Array.from({length:12},(_,index)=><span key={index}>{index+1}</span>)}</div>
     <div className={`fretboard ${style} review`}>
       {Array.from({length:6},(_,string)=><div className="string-row" key={string} style={{gridTemplateColumns:GRID_TEMPLATE}}>
-        <button className="string-label" type="button" tabIndex={-1}><span className="string-number-label">{string+1}弦</span><span className="open-note-label">{NOTES[OPEN_NOTES[string]]}</span></button>
+        <button className="string-label" type="button" tabIndex={-1}><span className="string-number-label">{string+1}弦</span><span className="open-note-label">{formatActiveNote(NOTES[OPEN_NOTES[string]])}</span></button>
         {Array.from({length:12},(_,index)=>{
           const fret=index+1
           const stat=positionStats[`${string}-${fret}`]
           const total=stat?stat.correct+stat.wrong:0
           const rate=total?stat.correct/total:1
           const heatClass=total>=2?(rate<.5?'heat-weak':rate<.8?'heat-warn':'heat-strong'):''
-          return <button type="button" tabIndex={-1} key={fret} className={heatClass} title={total?`${string+1}弦 ${fret}品 · ${Math.round(rate*100)}%`:`${string+1}弦 ${fret}品 · 尚未评估`}><span className="string-wire"/><b>{NOTES[(OPEN_NOTES[string]+fret)%12]}</b></button>
+          return <button type="button" tabIndex={-1} key={fret} className={heatClass} title={total?`${string+1}弦 ${fret}品 · ${Math.round(rate*100)}%`:`${string+1}弦 ${fret}品 · 尚未评估`}><span className="string-wire"/><b>{formatActiveNote(NOTES[(OPEN_NOTES[string]+fret)%12])}</b></button>
         })}
       </div>)}
       <div className="markers" style={{gridTemplateColumns:GRID_TEMPLATE}}><span/>{Array.from({length:12},(_,index)=>{const fret=index+1;return <span key={fret}>{MARKERS.has(fret)&&<i className={fret===12?'double':''}/>}</span>})}</div>
