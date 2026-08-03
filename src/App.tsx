@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { BarChart3, Eye, EyeOff, Guitar, Pause, Play, RotateCcw, Settings2, Smartphone, Sparkles, Square, Volume2, X } from 'lucide-react'
+import { BarChart3, Eye, EyeOff, Guitar, Pause, Play, RotateCcw, RotateCw, Settings2, Smartphone, Sparkles, Square, Volume2, X } from 'lucide-react'
 import { clearLearningData, loadPositionStats, loadPreferences, POSITION_STATS_KEY, PREFERENCES_KEY, saveJson } from './lib/storage'
 import { ScaleControls } from './features/scales/ScaleControls'
 import { useScalePractice } from './features/scales/useScalePractice'
@@ -112,6 +112,7 @@ function App() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [focusTraining, setFocusTraining] = useState(false)
   const [scaleFocus, setScaleFocus] = useState(false)
+  const [manualLandscape, setManualLandscape] = useState(false)
   const [fretboardStyle, setFretboardStyle] = useState<FretboardStyle>(() => initialPreferences.fretboardStyle ?? 'practice')
   const [noteNotation, setNoteNotation] = useState<NoteNotation>(() => initialPreferences.noteNotation ?? 'letter')
   setActiveNoteNotation(noteNotation)
@@ -350,6 +351,15 @@ function App() {
     document.addEventListener('fullscreenchange', syncFullscreen)
     return () => document.removeEventListener('fullscreenchange', syncFullscreen)
   }, [])
+
+  useEffect(() => {
+    if (!manualLandscape) return
+    const landscapeQuery = window.matchMedia('(orientation: landscape)')
+    const syncOrientation = () => { if (landscapeQuery.matches) setManualLandscape(false) }
+    syncOrientation()
+    landscapeQuery.addEventListener?.('change', syncOrientation)
+    return () => landscapeQuery.removeEventListener?.('change', syncOrientation)
+  }, [manualLandscape])
 
   useEffect(() => {
     if (dailyStep === null || appMode !== 'training' || status !== 'idle') return
@@ -616,7 +626,7 @@ function App() {
   }
 
   return (
-    <main className={`app-${appMode} ${assessmentStep!==null?'assessment-running':''} ${focusTraining ? 'training-focus' : ''} ${scaleFocus ? 'scale-focus' : ''}`}>
+    <main className={`app-${appMode} ${assessmentStep!==null?'assessment-running':''} ${focusTraining ? 'training-focus' : ''} ${scaleFocus ? 'scale-focus' : ''} ${manualLandscape ? 'manual-landscape' : ''}`}>
       <header className="topbar">
         <a className="brand" href="#"><span className="brand-mark"><Guitar size={19}/></span><span>Fret<span>Seek</span></span></a>
         <nav>
@@ -637,7 +647,8 @@ function App() {
 
       {reportOpen&&<ProgressReportModal profile={practiceProfile} positionStats={positionStats} fretboardStyle={fretboardStyle} onClose={()=>setReportOpen(false)}/>} 
 
-      {((appMode === 'training' && status === 'playing') || (appMode === 'learning' && ['explore','interval','scales'].includes(learningView))) && <div className="portrait-orientation-guard" role="dialog" aria-modal="true" aria-label="请横屏使用指板"><div className="rotate-phone"><Smartphone size={42}/><i>↻</i></div><strong>请将手机横过来</strong><p>横屏后可以完整查看吉他指板<br/>页面会自动恢复，无需刷新</p><button onClick={()=>setSettingsOpen(true)}><Settings2 size={14}/> 打开设置</button></div>}
+      {((appMode === 'training' && status === 'playing') || (appMode === 'learning' && ['explore','interval','scales'].includes(learningView))) && !manualLandscape && <div className="portrait-orientation-guard" role="dialog" aria-modal="true" aria-label="请横屏使用指板"><div className="rotate-phone"><Smartphone size={42}/><i>↻</i></div><strong>请将手机横过来</strong><p>如果手机锁定了方向，也可以手动进入横屏视图<br/>不需要去系统设置里取消锁定</p><div className="orientation-actions"><button className="manual-landscape-btn" onClick={()=>setManualLandscape(true)}><RotateCw size={14}/> 手动横屏</button><button onClick={()=>setSettingsOpen(true)}><Settings2 size={14}/> 打开设置</button></div></div>}
+      {manualLandscape && <button className="manual-landscape-exit" onClick={()=>setManualLandscape(false)} aria-label="退出手动横屏"><X size={15}/> 退出横屏</button>}
 
       {appMode === 'training' && dailyStep === null && assessmentStep === null && <TrainingNavigation trainingType={trainingType} status={status} onSelect={(type)=>{setTrainingType(type);setStatus('idle')}}/>}
       {appMode === 'training' && dailyStep !== null && <DailySessionBar stages={practiceProfile.dailyPlan} step={dailyStep} timeLeft={timeLeft} onExit={exitDailyPractice}/>}
