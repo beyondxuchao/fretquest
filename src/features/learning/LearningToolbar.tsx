@@ -4,6 +4,7 @@ const VIEWS: Array<{value:LearningView;label:string}> = [
   {value:'explore',label:'指板探索'},
   {value:'interval',label:'音程形状'},
   {value:'caged',label:'CAGED'},
+  {value:'chords',label:'和弦'},
   {value:'scales',label:'音阶'},
   {value:'theory',label:'基础乐理'},
   {value:'ear',label:'听音学习'},

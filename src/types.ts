@@ -5,7 +5,7 @@ export type FretboardStyle = 'practice' | 'realistic' | 'ebony' | 'maple'
 export type NoteNotation = 'letter' | 'number'
 export type AppMode = 'assessment' | 'daily' | 'training' | 'beginner' | 'learning' | 'scales' | 'theory' | 'chords' | 'recorder' | 'drums'
 export type TrainingType = 'locate' | 'identify' | 'stringLocate' | 'positionAssessment' | 'allNotes' | 'octave' | 'interval' | 'intervalShape' | 'earLocate' | 'adaptive' | 'scaleDegree' | 'chordTone' | 'arpeggio'
-export type LearningView = 'explore' | 'ear' | 'interval' | 'scales' | 'theory' | 'caged'
+export type LearningView = 'explore' | 'ear' | 'interval' | 'chords' | 'scales' | 'theory' | 'caged'
 export type SolfegeDirection = 'noteToNumber' | 'numberToNote' | 'noteToName' | 'nameToNote' | 'numberToName' | 'nameToNumber'
 export type KeyMode = 'major' | 'minor'
 
