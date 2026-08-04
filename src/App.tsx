@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { BarChart3, Eye, EyeOff, Guitar, Pause, Play, RotateCcw, RotateCw, Settings2, Smartphone, Sparkles, Square, Volume2, X } from 'lucide-react'
 import { clearLearningData, loadPositionStats, loadPreferences, POSITION_STATS_KEY, PREFERENCES_KEY, saveJson } from './lib/storage'
 import { ScaleControls } from './features/scales/ScaleControls'
@@ -8,39 +8,39 @@ import { Fretboard } from './components/Fretboard'
 import { AudioInputPanel } from './features/audio/AudioInputPanel'
 import { useAudioInput } from './features/audio/useAudioInput'
 import { useGuitarAudio } from './features/audio/useGuitarAudio'
-import { RecorderStudio } from './features/recorder/RecorderStudio'
-import { useRecorder } from './features/recorder/useRecorder'
-import { DrumMachine } from './features/drums/DrumMachine'
-import { useDrumMachine } from './features/drums/useDrumMachine'
+import { useMetronome } from './features/metronome/useMetronome'
 import { TrainingNavigation } from './features/training/TrainingNavigation'
 import { TrainingStats } from './features/training/TrainingStats'
 import { WeakReview } from './features/training/WeakReview'
 import { LearningToolbar } from './features/learning/LearningToolbar'
 import { IntervalLearningPanel } from './features/learning/IntervalLearningPanel'
 import { ChordDerivationLesson } from './features/learning/ChordDerivationLesson'
-import { GuitarAnatomyPage } from './features/beginner/GuitarAnatomyPage'
-import { GuitarStringsLessonPage } from './features/beginner/GuitarStringsLessonPage'
-import { NoteNamesLessonPage } from './features/beginner/NoteNamesLessonPage'
-import { ToneDistanceLessonPage } from './features/beginner/ToneDistanceLessonPage'
-import { FretPositionsLessonPage } from './features/beginner/FretPositionsLessonPage'
-import { OneStringNotesLessonPage } from './features/beginner/OneStringNotesLessonPage'
-import { ChromaticNotesLessonPage } from './features/beginner/ChromaticNotesLessonPage'
-import { WholeFretboardLessonPage } from './features/beginner/WholeFretboardLessonPage'
-import { FirstMelodyLessonPage } from './features/beginner/FirstMelodyLessonPage'
-import { FirstChordLessonPage } from './features/beginner/FirstChordLessonPage'
-import { FirstChordProgressionLessonPage } from './features/beginner/FirstChordProgressionLessonPage'
-import { MajorMinorChordLessonPage } from './features/beginner/MajorMinorChordLessonPage'
-import { MelodyHarmonyLessonPage } from './features/beginner/MelodyHarmonyLessonPage'
-import { MelodyAccompanimentLessonPage } from './features/beginner/MelodyAccompanimentLessonPage'
-import { DailyPracticePage, DailySessionBar } from './features/daily/DailyPracticePage'
-import { AssessmentPage } from './features/assessment/AssessmentPage'
-import { ProgressReportModal } from './features/report/ProgressReportModal'
+import { DailySessionBar } from './features/daily/DailySessionBar'
 import { ASSESSMENT_STAGES, loadPracticeProfile, PRACTICE_PROFILE_KEY, updatePracticeProfile } from './lib/practiceProfile'
 import { formatNote, setActiveNoteNotation } from './lib/noteNotation'
 import { CAGED_C_MAJOR, CAGED_SHAPES, CHORD_TYPES, DIAGRAM_OPEN, FRET_POSITIONS, HALF_STEP_LESSON_HIGHLIGHTS, INTERVALS, NATURAL_PITCHES, NOTES, OPEN_MIDI, OPEN_NOTES, SCALES, SOLFEGE, STRING_NAMES, deriveVoicings, intervalDegreeLabel, noteAt, parseChordDegrees, parseChordInput } from './lib/musicTheory'
 import type { ChordType, ScaleType } from './lib/musicTheory'
 import type { PracticeSession, StageResult } from './lib/practiceProfile'
 import type { AppMode, Feedback, FretboardStyle, LearningView, NoteNotation, PositionStats, Preferences, SolfegeDirection, Status, TrainingType } from './types'
+
+const Metronome = lazy(() => import('./features/metronome/Metronome').then((module) => ({ default: module.Metronome })))
+const GuitarAnatomyPage = lazy(() => import('./features/beginner/GuitarAnatomyPage').then((module) => ({ default: module.GuitarAnatomyPage })))
+const GuitarStringsLessonPage = lazy(() => import('./features/beginner/GuitarStringsLessonPage').then((module) => ({ default: module.GuitarStringsLessonPage })))
+const NoteNamesLessonPage = lazy(() => import('./features/beginner/NoteNamesLessonPage').then((module) => ({ default: module.NoteNamesLessonPage })))
+const ToneDistanceLessonPage = lazy(() => import('./features/beginner/ToneDistanceLessonPage').then((module) => ({ default: module.ToneDistanceLessonPage })))
+const FretPositionsLessonPage = lazy(() => import('./features/beginner/FretPositionsLessonPage').then((module) => ({ default: module.FretPositionsLessonPage })))
+const OneStringNotesLessonPage = lazy(() => import('./features/beginner/OneStringNotesLessonPage').then((module) => ({ default: module.OneStringNotesLessonPage })))
+const ChromaticNotesLessonPage = lazy(() => import('./features/beginner/ChromaticNotesLessonPage').then((module) => ({ default: module.ChromaticNotesLessonPage })))
+const WholeFretboardLessonPage = lazy(() => import('./features/beginner/WholeFretboardLessonPage').then((module) => ({ default: module.WholeFretboardLessonPage })))
+const FirstMelodyLessonPage = lazy(() => import('./features/beginner/FirstMelodyLessonPage').then((module) => ({ default: module.FirstMelodyLessonPage })))
+const FirstChordLessonPage = lazy(() => import('./features/beginner/FirstChordLessonPage').then((module) => ({ default: module.FirstChordLessonPage })))
+const FirstChordProgressionLessonPage = lazy(() => import('./features/beginner/FirstChordProgressionLessonPage').then((module) => ({ default: module.FirstChordProgressionLessonPage })))
+const MajorMinorChordLessonPage = lazy(() => import('./features/beginner/MajorMinorChordLessonPage').then((module) => ({ default: module.MajorMinorChordLessonPage })))
+const MelodyHarmonyLessonPage = lazy(() => import('./features/beginner/MelodyHarmonyLessonPage').then((module) => ({ default: module.MelodyHarmonyLessonPage })))
+const MelodyAccompanimentLessonPage = lazy(() => import('./features/beginner/MelodyAccompanimentLessonPage').then((module) => ({ default: module.MelodyAccompanimentLessonPage })))
+const DailyPracticePage = lazy(() => import('./features/daily/DailyPracticePage').then((module) => ({ default: module.DailyPracticePage })))
+const AssessmentPage = lazy(() => import('./features/assessment/AssessmentPage').then((module) => ({ default: module.AssessmentPage })))
+const ProgressReportModal = lazy(() => import('./features/report/ProgressReportModal').then((module) => ({ default: module.ProgressReportModal })))
 
 function TargetQuestionMark() {
   return <svg className="target-question-mark" viewBox="0 0 96 96" aria-hidden="true" focusable="false">
@@ -61,7 +61,7 @@ function App() {
   const [assessmentResult,setAssessmentResult]=useState<StageResult[]|null>(null)
   const [reportOpen,setReportOpen]=useState(false)
   const [assessmentFretRange,setAssessmentFretRange]=useState<{min:number;max:number}|null>(null)
-  const {bpm:drumBpm,setBpm:setDrumBpm,drumPlaying,setDrumPlaying,metronomePlaying,setMetronomePlaying,metronomeBeat,drumStep,pattern:drumPattern,setPattern:setDrumPattern,playMetronomeClick}=useDrumMachine()
+  const {bpm:metronomeBpm,setBpm:setMetronomeBpm,playing:metronomePlaying,setPlaying:setMetronomePlaying,beat:metronomeBeat,playMetronomeClick}=useMetronome()
   const [learningView, setLearningView] = useState<LearningView>('explore')
   const [exploreSelectedString,setExploreSelectedString]=useState(5)
   const [exploreShowSharps,setExploreShowSharps]=useState(true)
@@ -145,8 +145,7 @@ function App() {
   const answerRef = useRef<(note: string) => void>(() => {})
   const { playGuitar, playTone } = useGuitarAudio(soundOn)
   const {scaleSequenceActive,setScaleSequenceActive,scaleSequenceStep,setScaleSequenceStep,scaleDescending,setScaleDescending,scalePlaybackPosition,scalePlaybackStart,setScalePlaybackStart,scalePlaybackActive,scalePlaybackError,setScalePlaybackError,scalePlaybackBpm,scalePlaybackBpmDraft,setScalePlaybackBpmDraft,scalePlaybackMetronome,setScalePlaybackMetronome,scaleNotes,scaleSequence,orderedScaleSequence,handleScaleSequenceClick,stopScalePlayback,commitScalePlaybackBpm,playCurrentScale}=useScalePractice({scaleRoot,scaleType,playGuitar,playMetronomeClick,setFeedback})
-  const {state:inputState,devices:inputDevices,deviceId,detectedNote,detectedMidi,detectedHz,detectedCents,pitchStable,inputLevel,error:inputError,stream:inputStream,connect:connectInput,stop:stopInput}=useAudioInput({notes:NOTES,noiseGate,stability,status,onStableNote:(note)=>answerRef.current(note)})
-  const {state:recordingState,url:recordingUrl,seconds:recordingSeconds,mime:recordingMime,start:startRecording,stop:stopRecording,clear:clearRecording}=useRecorder(inputStream)
+  const {state:inputState,devices:inputDevices,deviceId,detectedNote,detectedMidi,detectedHz,detectedCents,pitchStable,inputLevel,error:inputError,connect:connectInput,stop:stopInput}=useAudioInput({notes:NOTES,noiseGate,stability,status,onStableNote:(note)=>answerRef.current(note)})
 
   const availableNotes = useMemo(() => {
     const found = new Set<string>()
@@ -235,12 +234,12 @@ function App() {
   }, [earPromptId, questionPosition.fret, questionPosition.string, status, trainingType])
 
   const disconnectInput = useCallback(() => {
-    stopRecording(); stopInput(); setLiveFretboardMap(false)
-  }, [stopInput, stopRecording])
+    stopInput(); setLiveFretboardMap(false)
+  }, [stopInput])
 
   const selectInput = useCallback((selectedId?: string) => {
-    stopRecording(); setLiveFretboardMap(false); void connectInput(selectedId)
-  }, [connectInput, stopRecording])
+    setLiveFretboardMap(false); void connectInput(selectedId)
+  }, [connectInput])
 
   const startGame = () => {
     setScore(0); setStreak(0); setBestStreak(0); setCorrect(0); setAttempts(0)
@@ -642,8 +641,7 @@ function App() {
           <button className={appMode === 'training' && dailyStep === null ? 'nav-active' : ''} onClick={() => { setDailyStep(null); setAppMode('training'); setStatus('idle') }}>训练场</button>
           <button className={appMode === 'learning' ? 'nav-active' : ''} onClick={() => { setDailyStep(null); setAppMode('learning'); setStatus('idle') }}>学习模式</button>
           <button className={appMode === 'chords' ? 'nav-active' : ''} onClick={() => { setDailyStep(null); setAppMode('chords'); setStatus('idle') }}>和弦推导</button>
-          <button className={appMode === 'drums' ? 'nav-active' : ''} onClick={() => { setDailyStep(null); setAppMode('drums'); setStatus('idle') }}>节奏鼓机</button>
-          <button className={appMode === 'recorder' ? 'nav-active' : ''} onClick={() => { setDailyStep(null); setAppMode('recorder'); setStatus('idle') }}>录音机</button>
+          <button className={appMode === 'metronome' ? 'nav-active' : ''} onClick={() => { setDailyStep(null); setAppMode('metronome'); setStatus('idle') }}>节拍器</button>
         </nav>
         <div className="header-actions">
           <button className="settings-btn report-open" onClick={()=>setReportOpen(true)}><BarChart3 size={17}/> 报告</button>
@@ -652,7 +650,7 @@ function App() {
         </div>
       </header>
 
-      {reportOpen&&<ProgressReportModal profile={practiceProfile} positionStats={positionStats} fretboardStyle={fretboardStyle} onClose={()=>setReportOpen(false)}/>} 
+      {reportOpen&&<Suspense fallback={null}><ProgressReportModal profile={practiceProfile} positionStats={positionStats} fretboardStyle={fretboardStyle} onClose={()=>setReportOpen(false)}/></Suspense>} 
 
       {((appMode === 'training' && status === 'playing') || (appMode === 'learning' && ['explore','interval','scales'].includes(learningView))) && !manualLandscape && <div className="portrait-orientation-guard" role="dialog" aria-modal="true" aria-label="请横屏使用指板"><div className="rotate-phone"><Smartphone size={42}/><i>↻</i></div><strong>请将手机横过来</strong><p>如果手机锁定了方向，也可以手动进入横屏视图<br/>不需要去系统设置里取消锁定</p><div className="orientation-actions"><button className="manual-landscape-btn" onClick={()=>setManualLandscape(true)}><RotateCw size={14}/> 手动横屏</button><button onClick={()=>setSettingsOpen(true)}><Settings2 size={14}/> 打开设置</button></div></div>}
       {manualLandscape && <button className="manual-landscape-exit" onClick={()=>setManualLandscape(false)} aria-label="退出手动横屏"><X size={15}/> 退出横屏</button>}
@@ -662,8 +660,8 @@ function App() {
       {appMode === 'training' && assessmentStep !== null && <DailySessionBar stages={ASSESSMENT_STAGES} step={assessmentStep} timeLeft={timeLeft} label="首次能力诊断" questionIndex={assessmentQuestionNumber} questionTotal={5} onExit={exitAssessment}/>} 
 
       {appMode !== 'beginner' && <section className="hero">
-        <div className="eyebrow"><Sparkles size={14}/> {appMode === 'assessment' ? '先诊断，再制定真正适合你的课程' : appMode === 'daily' ? '定位、关系、应用与听觉，一次完成' : appMode === 'drums' ? '为节拍、分解和即兴提供稳定律动' : appMode === 'recorder' ? '记录每一次练习与灵感' : appMode === 'chords' ? '从组成音推导可弹奏的吉他指法' : learningTheory ? '理解规则，才能更快记住指板' : learningScale ? '看见音阶在整块指板上的形状' : appMode === 'learning' ? '观察、聆听，熟悉音符之间的关系' : '每天 5 分钟，认识整块指板'}</div>
-        <h1>{appMode === 'assessment' ? assessmentResult?'诊断分析':'能力诊断' : appMode === 'daily' ? '今日混合练习' : appMode === 'drums' ? '练琴节奏鼓机' : appMode === 'recorder' ? '吉他录音机' : appMode === 'chords' ? '吉他和弦推导' : learningTheory ? '吉他基础乐理' : learningScale ? '音阶练习' : appMode === 'learning' ? '自由探索指板' : status === 'finished' ? dailyStep !== null ? '今日练习完成' : '本局完成' : '找到这个音'}</h1>
+        <div className="eyebrow"><Sparkles size={14}/> {appMode === 'assessment' ? '先诊断，再制定真正适合你的课程' : appMode === 'daily' ? '定位、关系、应用与听觉，一次完成' : appMode === 'metronome' ? '为节拍、分解和即兴提供稳定速度' : appMode === 'chords' ? '从组成音推导可弹奏的吉他指法' : learningTheory ? '理解规则，才能更快记住指板' : learningScale ? '看见音阶在整块指板上的形状' : appMode === 'learning' ? '观察、聆听，熟悉音符之间的关系' : '每天 5 分钟，认识整块指板'}</div>
+        <h1>{appMode === 'assessment' ? assessmentResult?'诊断分析':'能力诊断' : appMode === 'daily' ? '今日混合练习' : appMode === 'metronome' ? '练琴节拍器' : appMode === 'chords' ? '吉他和弦推导' : learningTheory ? '吉他基础乐理' : learningScale ? '音阶练习' : appMode === 'learning' ? '自由探索指板' : status === 'finished' ? dailyStep !== null ? '今日练习完成' : '本局完成' : '找到这个音'}</h1>
         {appMode === 'chords' && <div className="scale-heading"><strong>{displayNotes[effectiveRoot]}{effectiveSuffix}</strong><small>{effectiveName} · {effectiveFormula} · {chordNotes.map((note)=>formatNote(note,noteNotation)).join(' · ')}</small></div>}
         {learningTheory && <div className="scale-heading"><strong>{theoryLesson === 'notes' ? '认识十二个音' : theoryLesson === 'intervals' ? '理解音程距离' : '音名与唱名转换'}</strong><small>{theoryLesson === 'notes' ? '从 C 到 B，读懂指板上的语言' : theoryLesson === 'intervals' ? '两个音之间的距离，构成旋律与和弦' : 'C D E F G A B ↔ 1 2 3 4 5 6 7'}</small></div>}
         {learningScale && <div className="scale-heading"><strong>{displayNotes[scaleRoot]} {SCALES[scaleType].name}</strong><small>{SCALES[scaleType].intervals.map((interval) => displayNotes[(scaleRoot + interval) % 12]).join(' · ')}</small></div>}
@@ -678,6 +676,7 @@ function App() {
       </section>}
 
       <section className={`game-wrap mode-${appMode} ${appMode === 'training' ? `training-${status}` : ''}`}>
+        <Suspense fallback={<div className="route-loading"><span>LOADING</span><strong>正在加载课程</strong></div>}>
         {appMode === 'assessment' && <AssessmentPage profile={practiceProfile} result={assessmentResult} onStart={startAssessment} onSkip={skipAssessment} onContinue={()=>{setAssessmentResult(null);setAppMode('daily');setStatus('idle')}}/>}
         {appMode === 'daily' && <DailyPracticePage stages={practiceProfile.dailyPlan} onStart={startDailyPractice}/>} 
         {appMode === 'beginner' && beginnerLesson === 'anatomy' && <GuitarAnatomyPage onNext={()=>setBeginnerLesson('strings')}/>} 
@@ -695,13 +694,12 @@ function App() {
         {appMode === 'beginner' && beginnerLesson === 'melody-harmony' && <MelodyHarmonyLessonPage onBack={()=>setBeginnerLesson('major-minor')} onNext={()=>setBeginnerLesson('accompaniment')} onPlay={playGuitar}/>} 
         {appMode === 'beginner' && beginnerLesson === 'accompaniment' && <MelodyAccompanimentLessonPage onBack={()=>setBeginnerLesson('melody-harmony')} onNext={()=>setAppMode('chords')} onPlay={playGuitar}/>} 
         {appMode === 'training' && status !== 'playing' && ['locate','stringLocate','adaptive'].includes(trainingType) && <section className="position-practice"><div><span>POSITION PRACTICE</span><strong>按把位练习</strong><small>固定手形覆盖一小段品位，强迫自己离开前五品。</small></div><div className="position-buttons">{FRET_POSITIONS.map((position)=><button key={position.label} className={minFret===position.start&&maxFret===position.end?'selected':''} onClick={()=>{setMinFret(position.start);setMaxFret(position.end)}}><strong>{position.label}</strong><small>{position.start}–{position.end} 品</small></button>)}<button className="position-custom" onClick={()=>setSettingsOpen(true)}><strong>自定义</strong><small>{minFret}–{maxFret} 品</small></button></div></section>}
-        {appMode === 'training' && (status === 'playing' || focusTraining) && <div className="landscape-target-hud"><span>{status === 'finished' ? '训练完成' : '当前目标'}</span><strong>{status === 'finished' ? `${score} 分` : trainingType === 'identify' ? '识别高亮位置' : trainingType === 'earLocate' ? '听音找位置' : trainingType === 'octave' ? '8度' : trainingType === 'interval' ? INTERVALS.find((item)=>item[2]===targetInterval)?.[1] : trainingType === 'scaleDegree' ? `${([...SCALES[scaleType].intervals] as number[]).indexOf(trainingGoalOffset)+1}级 · ${displayTarget}` : trainingType === 'chordTone' ? `${displayTarget} · 和弦内音` : displayTarget}</strong><small>{status === 'finished' ? `${accuracy}%` : trainingType === 'stringLocate' || trainingType === 'adaptive' || trainingType === 'scaleDegree' || trainingType === 'chordTone' ? `第 ${targetString+1} 弦` : trainingType === 'arpeggio' ? `${arpeggioStep}/${arpeggioPath.length}` : `${timeLeft}秒`}</small>{focusTraining && <button onClick={exitFocusTraining} aria-label="退出全屏训练"><X size={15}/></button>}</div>}
+        {appMode === 'training' && (status === 'playing' || focusTraining) && <div className="landscape-target-hud"><span>{status === 'finished' ? '训练完成' : '当前目标'}</span><strong>{status === 'finished' ? `${score} 分` : trainingType === 'identify' ? '识别高亮位置' : trainingType === 'earLocate' ? '听音找位置' : trainingType === 'octave' ? '8度' : trainingType === 'interval' ? INTERVALS.find((item)=>item[2]===targetInterval)?.[1] : trainingType === 'scaleDegree' ? `${([...SCALES[scaleType].intervals] as number[]).indexOf(trainingGoalOffset)+1}级 · ${displayTarget}` : trainingType === 'chordTone' ? `${displayTarget} · 和弦内音` : displayTarget}</strong><small>{status === 'finished' ? `${accuracy}%` : trainingType === 'earLocate' ? '参考 C · 5弦3品' : trainingType === 'stringLocate' || trainingType === 'adaptive' || trainingType === 'scaleDegree' || trainingType === 'chordTone' ? `第 ${targetString+1} 弦` : trainingType === 'arpeggio' ? `${arpeggioStep}/${arpeggioPath.length}` : `${timeLeft}秒`}</small>{status === 'playing' && trainingType === 'earLocate' && <div className="landscape-ear-actions"><button onClick={() => playGuitar(questionPosition.string,questionPosition.fret)} aria-label="再听目标音"><Volume2 size={13}/><span>重听</span></button><button onClick={() => playGuitar(4,3)} aria-label="播放参考音 C，5弦3品"><Volume2 size={13}/><span>C 5弦3品</span></button></div>}{focusTraining && <button onClick={exitFocusTraining} aria-label="退出全屏训练"><X size={15}/></button>}</div>}
         {appMode === 'training' && status === 'idle' && ['scaleDegree','chordTone','arpeggio'].includes(trainingType) && <div className="applied-training-controls">
           <span>训练内容</span><label>根音<select value={trainingType === 'scaleDegree' ? scaleRoot : chordRoot} onChange={(e)=>trainingType === 'scaleDegree' ? setScaleRoot(Number(e.target.value)) : setChordRoot(Number(e.target.value))}>{NOTES.map((note,index)=><option key={note} value={index}>{note}</option>)}</select></label>
           {trainingType === 'scaleDegree' ? <label>音阶<select value={scaleType} onChange={(e)=>setScaleType(e.target.value as ScaleType)}>{Object.entries(SCALES).map(([key,value])=><option key={key} value={key}>{value.name}</option>)}</select></label> : <label>和弦<select value={chordType} onChange={(e)=>setChordType(e.target.value as ChordType)}>{Object.entries(CHORD_TYPES).map(([key,value])=><option key={key} value={key}>{value.name}</option>)}</select></label>}
         </div>}
-        {appMode === 'drums' && <DrumMachine bpm={drumBpm} drumPlaying={drumPlaying} drumStep={drumStep} metronomePlaying={metronomePlaying} metronomeBeat={metronomeBeat} pattern={drumPattern} onBpmChange={setDrumBpm} onDrumPlayingChange={setDrumPlaying} onMetronomePlayingChange={setMetronomePlaying} onPatternChange={setDrumPattern}/>} 
-        {appMode === 'recorder' && <RecorderStudio inputState={inputState} devices={inputDevices} deviceId={deviceId} inputLevel={inputLevel} inputError={inputError} recordingState={recordingState} recordingUrl={recordingUrl} recordingSeconds={recordingSeconds} recordingMime={recordingMime} onSelectInput={selectInput} onDisconnect={disconnectInput} onStart={startRecording} onStop={stopRecording} onClear={clearRecording}/>} 
+        {appMode === 'metronome' && <Metronome bpm={metronomeBpm} playing={metronomePlaying} beat={metronomeBeat} onBpmChange={setMetronomeBpm} onPlayingChange={setMetronomePlaying}/>} 
         {appMode === 'learning' && <LearningToolbar view={learningView} onChange={setLearningView}/>}
         {appMode === 'learning' && learningView === 'explore' && <section className="explore-map-panel">
           <div className="explore-map-head">
@@ -787,17 +785,17 @@ function App() {
           </div>}
         </section>}
         {learningScale && <ScaleControls notes={NOTES} root={scaleRoot} scales={Object.entries(SCALES).map(([value, scale]) => ({value,name:scale.name}))} scaleType={scaleType} playbackActive={scalePlaybackActive} bpm={scalePlaybackBpm} bpmDraft={scalePlaybackBpmDraft} metronome={scalePlaybackMetronome} focus={scaleFocus} sequenceActive={scaleSequenceActive} sequenceAvailable={Boolean(scaleSequence.length)} descending={scaleDescending} error={scalePlaybackError} onRootChange={(root) => {stopScalePlayback();setScalePlaybackStart(null);setScalePlaybackError('');setScaleRoot(root)}} onScaleTypeChange={(type) => setScaleType(type as ScaleType)} onTogglePlayback={scalePlaybackActive ? stopScalePlayback : playCurrentScale} onBpmDraftChange={setScalePlaybackBpmDraft} onBpmCommit={commitScalePlaybackBpm} onMetronomeChange={setScalePlaybackMetronome} onToggleFocus={scaleFocus ? exitScaleFocus : enterScaleFocus} onToggleSequence={() => {setScaleSequenceActive(!scaleSequenceActive);setScaleSequenceStep(0)}} onToggleDirection={() => {setScaleDescending(!scaleDescending);setScaleSequenceStep(0)}}/>}
-        {appMode !== 'assessment' && appMode !== 'daily' && appMode !== 'beginner' && appMode !== 'theory' && !learningTheory && !learningCaged && appMode !== 'chords' && appMode !== 'recorder' && <AudioInputPanel state={inputState} devices={inputDevices} deviceId={deviceId} inputLevel={inputLevel} pitchStable={pitchStable} detectedNote={detectedNote} detectedHz={detectedHz} detectedCents={detectedCents} error={inputError} liveMap={liveFretboardMap} calibrationOpen={calibrationOpen} noiseGate={noiseGate} stability={stability} onConnect={selectInput} onDisconnect={disconnectInput} onLiveMapChange={setLiveFretboardMap} onCalibrationOpenChange={setCalibrationOpen} onNoiseGateChange={setNoiseGate} onStabilityChange={setStability}/>} 
+        {appMode !== 'assessment' && appMode !== 'daily' && appMode !== 'beginner' && appMode !== 'theory' && !learningTheory && !learningCaged && appMode !== 'chords' && appMode !== 'metronome' && <AudioInputPanel state={inputState} devices={inputDevices} deviceId={deviceId} inputLevel={inputLevel} pitchStable={pitchStable} detectedNote={detectedNote} detectedHz={detectedHz} detectedCents={detectedCents} error={inputError} liveMap={liveFretboardMap} calibrationOpen={calibrationOpen} noiseGate={noiseGate} stability={stability} onConnect={selectInput} onDisconnect={disconnectInput} onLiveMapChange={setLiveFretboardMap} onCalibrationOpenChange={setCalibrationOpen} onNoiseGateChange={setNoiseGate} onStabilityChange={setStability}/>} 
         {appMode === 'training' && <TrainingStats timeLeft={timeLeft} score={score} streak={streak}/>}
 
-        {appMode !== 'assessment' && appMode !== 'daily' && appMode !== 'beginner' && appMode !== 'theory' && !learningTheory && appMode !== 'chords' && appMode !== 'recorder' && appMode !== 'drums' && !(appMode === 'learning' && learningView === 'ear') && <Fretboard appMode={appMode} status={status} trainingType={trainingType} style={fretboardStyle} activeStrings={activeStrings} stringNames={STRING_NAMES} minFret={visibleMinFret} fretCount={visibleFretCount} activeFretRange={positionAssessmentActive?assessmentFretRange:null} targetString={targetString} feedback={feedback} learningView={learningView} learningScale={learningScale} learningCaged={learningCaged} scaleRootNote={NOTES[scaleRoot]} scaleNotes={scaleNotes} scaleSequenceActive={scaleSequenceActive} scaleSequenceStep={scaleSequenceStep} orderedScaleSequence={orderedScaleSequence} scalePlaybackPosition={scalePlaybackPosition} scalePlaybackStart={scalePlaybackStart} liveFretboardMap={liveFretboardMap} pitchStable={pitchStable} detectedMidi={detectedMidi} openMidi={OPEN_MIDI} positionStats={positionStats} questionPosition={questionPosition} foundPositions={foundPositions} learningEarRevealed={learningEarRevealed} learningEarPosition={learningEarPosition} learningIntervalPair={learningIntervalPair} cagedPositions={cagedPositions} arpeggioPath={arpeggioPath} arpeggioStep={arpeggioStep} noteAt={noteAt} onChoose={(string,fret)=>{if(appMode==='learning'&&learningView==='explore'){setExploreAnimating(false);setExploreSelectedString(string);setExploreAnimationStep(Math.min(fret,12))}choose(string,fret)}} onScaleClick={handleScaleSequenceClick} onPlay={playGuitar} onSelectScaleStart={({string,fret})=>{setScalePlaybackStart({string,fret});setScalePlaybackError('');stopScalePlayback()}} highlightString={appMode==='learning'&&learningView==='explore'?exploreSelectedString:undefined} lessonActivePosition={appMode==='learning'&&learningView==='explore'?{string:exploreSelectedString,fret:Math.min(exploreAnimationStep,12)}:appMode==='learning'&&learningView==='chords'?learningChordPositions.anchor:null} lessonNaturalPositions={appMode==='learning'&&learningView==='explore'?explorePositions:appMode==='learning'&&learningView==='chords'?learningChordPositions.positions:undefined} lessonDegreeLabels={appMode==='learning'&&learningView==='chords'?learningChordPositions.labels:undefined} lessonChordFrets={appMode==='learning'&&learningView==='chords'?learningChordPositions.frets:undefined} lessonChordDegreeByPitch={appMode==='learning'&&learningView==='chords'?learningChordPositions.degreeByPitch:undefined}/>} 
+        {appMode !== 'assessment' && appMode !== 'daily' && appMode !== 'beginner' && appMode !== 'theory' && !learningTheory && appMode !== 'chords' && appMode !== 'metronome' && !(appMode === 'learning' && learningView === 'ear') && <Fretboard appMode={appMode} status={status} trainingType={trainingType} style={fretboardStyle} activeStrings={activeStrings} stringNames={STRING_NAMES} minFret={visibleMinFret} fretCount={visibleFretCount} activeFretRange={positionAssessmentActive?assessmentFretRange:null} targetString={targetString} feedback={feedback} learningView={learningView} learningScale={learningScale} learningCaged={learningCaged} scaleRootNote={NOTES[scaleRoot]} scaleNotes={scaleNotes} scaleSequenceActive={scaleSequenceActive} scaleSequenceStep={scaleSequenceStep} orderedScaleSequence={orderedScaleSequence} scalePlaybackPosition={scalePlaybackPosition} scalePlaybackStart={scalePlaybackStart} liveFretboardMap={liveFretboardMap} pitchStable={pitchStable} detectedMidi={detectedMidi} openMidi={OPEN_MIDI} positionStats={positionStats} questionPosition={questionPosition} foundPositions={foundPositions} learningEarRevealed={learningEarRevealed} learningEarPosition={learningEarPosition} learningIntervalPair={learningIntervalPair} cagedPositions={cagedPositions} arpeggioPath={arpeggioPath} arpeggioStep={arpeggioStep} noteAt={noteAt} onChoose={(string,fret)=>{if(appMode==='learning'&&learningView==='explore'){setExploreAnimating(false);setExploreSelectedString(string);setExploreAnimationStep(Math.min(fret,12))}choose(string,fret)}} onScaleClick={handleScaleSequenceClick} onPlay={playGuitar} onSelectScaleStart={({string,fret})=>{setScalePlaybackStart({string,fret});setScalePlaybackError('');stopScalePlayback()}} highlightString={appMode==='learning'&&learningView==='explore'?exploreSelectedString:undefined} lessonActivePosition={appMode==='learning'&&learningView==='explore'?{string:exploreSelectedString,fret:Math.min(exploreAnimationStep,12)}:appMode==='learning'&&learningView==='chords'?learningChordPositions.anchor:null} lessonNaturalPositions={appMode==='learning'&&learningView==='explore'?explorePositions:appMode==='learning'&&learningView==='chords'?learningChordPositions.positions:undefined} lessonDegreeLabels={appMode==='learning'&&learningView==='chords'?learningChordPositions.labels:undefined} lessonChordFrets={appMode==='learning'&&learningView==='chords'?learningChordPositions.frets:undefined} lessonChordDegreeByPitch={appMode==='learning'&&learningView==='chords'?learningChordPositions.degreeByPitch:undefined}/>} 
 
         {appMode === 'training' && status === 'playing' && trainingType === 'identify' && <div className="note-answers">{NOTES.map((note,index) => <button key={note} onClick={() => answerIdentification(note)}>{displayNotes[index]}</button>)}</div>}
 
         {appMode === 'training' && status === 'finished' && <WeakReview positionStats={positionStats} noteAt={displayNoteAt}/>} 
         {appMode === 'training' && status === 'finished' && dailyStep !== null && <section className="daily-adjustment"><div><span>ADAPTIVE PLAN UPDATED</span><h3>下一次 10 分钟课程已经调整</h3><p>系统结合本次各阶段正确率、长期错误位置和反应速度，重新分配了练习时间。</p></div><div>{practiceProfile.dailyPlan.map((stage)=><span key={stage.type}><strong>{stage.title}</strong><b>{Number.isInteger(stage.minutes)?`${stage.minutes}:00`:`${Math.floor(stage.minutes)}:${String(Math.round(stage.minutes%1*60)).padStart(2,'0')}`}</b></span>)}</div></section>}
 
-        {appMode !== 'assessment' && appMode !== 'daily' && appMode !== 'beginner' && appMode !== 'theory' && !learningTheory && !learningCaged && appMode !== 'chords' && appMode !== 'recorder' && appMode !== 'drums' && !(appMode === 'learning' && learningView === 'ear') && <div className="game-actions">
+        {appMode !== 'assessment' && appMode !== 'daily' && appMode !== 'beginner' && appMode !== 'theory' && !learningTheory && !learningCaged && appMode !== 'chords' && appMode !== 'metronome' && !(appMode === 'learning' && learningView === 'ear') && <div className="game-actions">
           {appMode === 'training' && status === 'idle' && <><button className="primary" onClick={startGame}>开始训练 <span>60 秒</span></button><button className="focus-launch" onClick={enterFocusTraining}>全屏训练</button></>}
           {appMode === 'training' && status === 'playing' && <><button className="quit" onClick={assessmentStep!==null?exitAssessment:()=>setStatus('finished')}>{assessmentStep!==null?'退出计划':'提前结束'}</button>{assessmentStep!==null&&<button className="skip-assessment-stage" onClick={skipAssessmentStage}>这项不会，跳过</button>}<button className="focus-launch" onClick={enterFocusTraining}>全屏训练</button></>}
           {appMode === 'training' && status === 'finished' && <button className="primary" onClick={dailyStep!==null?startDailyPractice:startGame}><RotateCcw size={18}/> {dailyStep!==null?'再练 10 分钟':'再来一局'}</button>}
@@ -805,6 +803,7 @@ function App() {
           {learningScale && <button className="primary" onClick={() => {setScaleSequenceActive(true);setScaleSequenceStep(0)}}><Play size={17}/> 开始{scaleDescending?'下行':'上行'}顺序练习</button>}
           <p>{learningScale ? (scaleSequenceActive ? `请点击发光音符 · 第 ${scaleSequenceStep+1}/${orderedScaleSequence.length} 个` : '点击“顺序练习”，按上行或下行顺序完成一个八度') : appMode === 'learning' ? '相同音名使用相同颜色，帮助你识别八度与横向规律' : status === 'idle' ? '找出目标音符在指板上的任意正确位置' : status === 'playing' ? '答对得 100 分，连续答对还有额外加成' : '所有音符已显示，可以复盘这一局'}</p>
         </div>}
+        </Suspense>
       </section>
 
       <footer><span>标准调弦 · E A D G B E</span><span>每天 10 分钟，你也能成为吉他大师</span></footer>

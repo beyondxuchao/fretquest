@@ -20,7 +20,6 @@ export function useAudioInput({ notes, noiseGate, stability, status, onStableNot
   const [pitchStable,setPitchStable]=useState(false)
   const [inputLevel,setInputLevel]=useState(0)
   const [error,setError]=useState('')
-  const [stream,setStream]=useState<MediaStream|null>(null)
   const audioRef=useRef<{context:AudioContext;stream:MediaStream;raf:number}|null>(null)
   const noiseGateRef=useRef(noiseGate)
   const stabilityRef=useRef(stability)
@@ -31,7 +30,7 @@ export function useAudioInput({ notes, noiseGate, stability, status, onStableNot
   const stop=useCallback(()=>{
     const audio=audioRef.current
     if(audio){cancelAnimationFrame(audio.raf);audio.stream.getTracks().forEach((track)=>track.stop());void audio.context.close();audioRef.current=null}
-    setStream(null);setState('off');setDetectedNote(null);setDetectedMidi(null);setDetectedHz(0);setDetectedCents(0);setPitchStable(false);setInputLevel(0)
+    setState('off');setDetectedNote(null);setDetectedMidi(null);setDetectedHz(0);setDetectedCents(0);setPitchStable(false);setInputLevel(0)
   },[])
 
   const connect=useCallback(async(selectedId?:string)=>{
@@ -39,7 +38,7 @@ export function useAudioInput({ notes, noiseGate, stability, status, onStableNot
     try{
       const mediaStream=await navigator.mediaDevices.getUserMedia({audio:{deviceId:selectedId?{exact:selectedId}:undefined,echoCancellation:false,noiseSuppression:false,autoGainControl:false}})
       const available=(await navigator.mediaDevices.enumerateDevices()).filter((device)=>device.kind==='audioinput')
-      setDevices(available);setDeviceId(mediaStream.getAudioTracks()[0]?.getSettings().deviceId||selectedId||'');setStream(mediaStream)
+      setDevices(available);setDeviceId(mediaStream.getAudioTracks()[0]?.getSettings().deviceId||selectedId||'')
       const context=new AudioContext(),source=context.createMediaStreamSource(mediaStream),analyser=context.createAnalyser()
       analyser.fftSize=4096;analyser.smoothingTimeConstant=0;source.connect(analyser)
       const samples=new Float32Array(analyser.fftSize)
@@ -57,5 +56,5 @@ export function useAudioInput({ notes, noiseGate, stability, status, onStableNot
   },[notes,stop])
 
   useEffect(()=>()=>stop(),[stop])
-  return {state,devices,deviceId,detectedNote,detectedMidi,detectedHz,detectedCents,pitchStable,inputLevel,error,stream,connect,stop}
+  return {state,devices,deviceId,detectedNote,detectedMidi,detectedHz,detectedCents,pitchStable,inputLevel,error,connect,stop}
 }

@@ -1,8 +1,29 @@
-import { useCallback, useRef } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { NOTES, OPEN_MIDI, SAMPLE_NOTE_NAMES } from '../../lib/musicTheory'
 
 function getAudioContextClass() {
   return window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
+}
+
+let guitarSoundfontPromise: Promise<Record<string, string> | null> | null = null
+
+function getGuitarSoundfont() {
+  return (window as unknown as { MIDI?: { Soundfont?: { acoustic_guitar_steel?: Record<string, string> } } }).MIDI?.Soundfont?.acoustic_guitar_steel
+}
+
+function loadGuitarSoundfont() {
+  const loaded = getGuitarSoundfont()
+  if (loaded) return Promise.resolve(loaded)
+  if (guitarSoundfontPromise) return guitarSoundfontPromise
+  guitarSoundfontPromise = new Promise((resolve) => {
+    const script = document.createElement('script')
+    script.src = `${import.meta.env.BASE_URL}audio/fluidr3-acoustic-guitar-steel.js`
+    script.async = true
+    script.onload = () => resolve(getGuitarSoundfont() ?? null)
+    script.onerror = () => resolve(null)
+    document.head.appendChild(script)
+  })
+  return guitarSoundfontPromise
 }
 
 function playSynthGuitar(ctx: AudioContext, midi: number) {
@@ -44,6 +65,11 @@ function playSynthGuitar(ctx: AudioContext, midi: number) {
 export function useGuitarAudio(soundOn: boolean) {
   const playbackContextRef = useRef<AudioContext | null>(null)
   const guitarSampleCache = useRef(new Map<number, AudioBuffer>())
+  const guitarSamplePromises = useRef(new Map<number, Promise<AudioBuffer | null>>())
+
+  useEffect(() => {
+    void loadGuitarSoundfont()
+  }, [])
 
   const playTone = useCallback((note: string, good: boolean) => {
     if (!soundOn) return
@@ -64,9 +90,7 @@ export function useGuitarAudio(soundOn: boolean) {
     if (!soundOn) return
     const AudioContextClass = getAudioContextClass()
     const midi = OPEN_MIDI[string] + fret
-    const soundfont = (window as unknown as { MIDI?: { Soundfont?: { acoustic_guitar_steel?: Record<string, string> } } }).MIDI?.Soundfont?.acoustic_guitar_steel
     const sampleKey = `${SAMPLE_NOTE_NAMES[midi % 12]}${Math.floor(midi / 12) - 1}`
-    const sampleUri = soundfont?.[sampleKey]
     const ctx = playbackContextRef.current || new AudioContextClass()
     playbackContextRef.current = ctx
     if (ctx.state === 'suspended') void ctx.resume()
@@ -82,13 +106,24 @@ export function useGuitarAudio(soundOn: boolean) {
     }
     const cached = guitarSampleCache.current.get(midi)
     if (cached) { playSample(cached); return }
-    if (sampleUri) {
-      void fetch(sampleUri).then((response) => response.arrayBuffer()).then((data) => ctx.decodeAudioData(data)).then((buffer) => {
-        guitarSampleCache.current.set(midi, buffer); playSample(buffer)
-      }).catch(() => playSynthGuitar(ctx, midi))
-      return
-    }
-    playSynthGuitar(ctx, midi)
+    const loadSample = () => loadGuitarSoundfont().then((soundfont) => {
+      const sampleUri = soundfont?.[sampleKey]
+      if (!sampleUri) return null
+      return fetch(sampleUri)
+        .then((response) => response.arrayBuffer())
+        .then((data) => ctx.decodeAudioData(data))
+        .then((buffer) => {
+          guitarSampleCache.current.set(midi, buffer)
+          return buffer
+        })
+    }).catch(() => null)
+    const pending = guitarSamplePromises.current.get(midi) ?? loadSample()
+    guitarSamplePromises.current.set(midi, pending)
+    void pending.then((buffer) => {
+      guitarSamplePromises.current.delete(midi)
+      if (buffer) playSample(buffer)
+      else playSynthGuitar(ctx, midi)
+    })
   }, [soundOn])
 
   return { playGuitar, playTone }

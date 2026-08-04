@@ -1,5 +1,5 @@
 import type { PositionStats, TrainingType } from '../types'
-import type { DailyStage } from '../features/daily/DailyPracticePage'
+import type { DailyStage } from '../features/daily/DailySessionBar'
 
 export const PRACTICE_PROFILE_KEY='fretquest.practiceProfile.v1'
 
