@@ -6,6 +6,13 @@
     <meta name="theme-color" content="#0d0f0e" />
     <meta name="description" content="FretSeek 吉他指板、音阶、和弦、听音与节拍训练。每天 10 分钟，掌握整块指板。" />
     <title>FretSeek · 吉他指板训练</title>
+    <script>
+      if ((location.hostname === 'bilibili.com' || location.hostname.endsWith('.bilibili.com')) && location.pathname.startsWith('/toy/')) {
+        var toySdk = document.createElement('script')
+        toySdk.src = '//s1.hdslb.com/bfs/seed/toy/app/sdk/toy-sdk.js'
+        document.head.appendChild(toySdk)
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>

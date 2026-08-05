@@ -15,6 +15,7 @@ type FretboardProps = {
   fretCount: number
   activeFretRange?: {min:number;max:number} | null
   targetString: number
+  targetStringActive?: boolean
   feedback: Feedback
   learningView: string
   learningScale: boolean
@@ -64,18 +65,19 @@ function QuestionMarkIcon() {
 }
 
 export function Fretboard(props: FretboardProps) {
-  const { appMode, status, trainingType, style, activeStrings, stringNames, minFret, fretCount, activeFretRange, targetString, feedback, learningView, learningScale, learningCaged, scaleRootNote, scaleNotes, scaleSequenceActive, scaleSequenceStep, orderedScaleSequence, scalePlaybackPosition, scalePlaybackStart, liveFretboardMap, pitchStable, detectedMidi, openMidi, positionStats, questionPosition, foundPositions, learningEarRevealed, learningEarPosition, learningIntervalPair, cagedPositions, arpeggioPath, arpeggioStep, noteAt, onChoose, onScaleClick, onPlay, onSelectScaleStart, highlightString, highlightStrings, lessonHighlights, lessonActivePosition, lessonNaturalPositions, lessonDegreeLabels, lessonChordFrets, lessonChordDegreeByPitch } = props
+  const { appMode, status, trainingType, style, activeStrings, stringNames, minFret, fretCount, activeFretRange, targetString, targetStringActive, feedback, learningView, learningScale, learningCaged, scaleRootNote, scaleNotes, scaleSequenceActive, scaleSequenceStep, orderedScaleSequence, scalePlaybackPosition, scalePlaybackStart, liveFretboardMap, pitchStable, detectedMidi, openMidi, positionStats, questionPosition, foundPositions, learningEarRevealed, learningEarPosition, learningIntervalPair, cagedPositions, arpeggioPath, arpeggioStep, noteAt, onChoose, onScaleClick, onPlay, onSelectScaleStart, highlightString, highlightStrings, lessonHighlights, lessonActivePosition, lessonNaturalPositions, lessonDegreeLabels, lessonChordFrets, lessonChordDegreeByPitch } = props
   const chordLessonMode = appMode === 'learning' && learningView === 'chords'
   const gridTemplateColumns = `var(--fret-label-width, 62px) repeat(${fretCount}, minmax(var(--fret-cell-min, 54px), 1fr))`
   const boardClasses = `fretboard ${style} ${status === 'finished' ? 'review' : ''} ${appMode === 'learning' && learningView === 'explore' ? 'learning' : ''} ${appMode === 'learning' && learningView === 'interval' ? 'interval-learning' : ''} ${appMode === 'learning' && learningView === 'chords' ? 'chord-learning' : ''} ${learningCaged ? 'caged-learning' : ''} ${appMode === 'learning' && learningView === 'ear' ? 'ear-learning' : ''} ${learningScale ? 'scale-mode' : ''}`
 
   return <div className={`fretboard-scroll ${activeFretRange?'assessment-fret-range':''}`}>
-    {activeFretRange&&<div className="assessment-range-label"><span>当前考核范围</span><strong>{activeFretRange.min}–{activeFretRange.max} 品</strong><small>范围外已锁定</small></div>}
+    {activeFretRange&&<div className="assessment-range-label"><span>当前练习范围</span><strong>{activeFretRange.min}–{activeFretRange.max} 品</strong><small>范围外已锁定</small></div>}
     <div className="fret-numbers" style={{gridTemplateColumns}}><span/>{Array.from({length:fretCount},(_,index)=><span key={minFret+index}>{minFret+index}</span>)}</div>
     <div className={boardClasses}>
       {activeStrings.map((active,string) => {
         const enabled = active || appMode === 'learning'
-        const stringClass = appMode === 'training' && status === 'playing' && ['stringLocate','adaptive','scaleDegree','chordTone'].includes(trainingType) ? (string === targetString ? 'target-string' : 'non-target-string') : ''
+        const shouldHighlightTargetString = targetStringActive ?? ['stringLocate','adaptive','scaleDegree','chordTone'].includes(trainingType)
+        const stringClass = appMode === 'training' && status === 'playing' && shouldHighlightTargetString ? (string === targetString ? 'target-string' : 'non-target-string') : ''
         const openNote = noteAt(string,0)
         const openDisplayNote = formatActiveNote(openNote)
         const openHit = feedback?.string === string && feedback.fret === 0

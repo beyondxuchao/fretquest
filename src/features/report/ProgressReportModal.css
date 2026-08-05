@@ -21,7 +21,30 @@
   flex: 0 0 auto;
 }
 
+.report-posters {
+  margin: 0 0 12px;
+  padding: 14px;
+  border: 1px solid #303931;
+  border-radius: 8px;
+  background: #181e19;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.report-posters span { color: #94b85b; font-size: 8px; }
+.report-posters h3 { margin: 4px 0; color: #edf2ed; font-size: 14px; }
+.report-posters p { margin: 0; color: #788278; font-size: 8px; }
+.report-posters > div:last-child { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 7px; }
+.report-posters button { height: 34px; padding: 0 11px; border: 1px solid #465545; border-radius: 7px; background: #232b24; color: #cfd8cd; display: inline-flex; align-items: center; gap: 6px; font-size: 8px; cursor: pointer; white-space: nowrap; }
+.report-posters button:hover { border-color: #718b50; color: #d7ff75; }
+.report-posters button:disabled { opacity: .6; cursor: wait; }
+
 @media (max-width: 700px) {
+  .report-posters { align-items: flex-start; flex-direction: column; }
+  .report-posters > div:last-child { width: 100%; justify-content: flex-start; }
+  .report-posters button { flex: 1 1 calc(50% - 7px); justify-content: center; }
   .progress-report .report-review-board .fretboard {
     min-width: 620px;
   }

@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { BarChart3, Eye, EyeOff, Guitar, Pause, Play, RotateCcw, RotateCw, Settings2, Smartphone, Sparkles, Square, Volume2, X } from 'lucide-react'
+import { BarChart3, Eye, EyeOff, Guitar, Pause, Play, RotateCcw, RotateCw, Settings2, Smartphone, Sparkles, Square, Trophy, Volume2, X } from 'lucide-react'
 import { clearLearningData, loadPositionStats, loadPreferences, POSITION_STATS_KEY, PREFERENCES_KEY, saveJson } from './lib/storage'
 import { ScaleControls } from './features/scales/ScaleControls'
 import { useScalePractice } from './features/scales/useScalePractice'
@@ -17,7 +17,11 @@ import { IntervalLearningPanel } from './features/learning/IntervalLearningPanel
 import { ChordDerivationLesson } from './features/learning/ChordDerivationLesson'
 import { DailySessionBar } from './features/daily/DailySessionBar'
 import { ASSESSMENT_STAGES, loadPracticeProfile, PRACTICE_PROFILE_KEY, updatePracticeProfile } from './lib/practiceProfile'
+import { currentDailyStreak, submitDailyRank } from './lib/toyLeaderboard'
+import { clearCloudSnapshot, getLocalSyncAt, loadCloudSnapshot, saveCloudSnapshot } from './lib/toyCloudSync'
+import { createDailyPoster, savePosterImage } from './lib/sharePoster'
 import { formatNote, setActiveNoteNotation } from './lib/noteNotation'
+import { isBilibiliToyEnvironment } from './lib/toyEnvironment'
 import { CAGED_C_MAJOR, CAGED_SHAPES, CHORD_TYPES, DIAGRAM_OPEN, FRET_POSITIONS, HALF_STEP_LESSON_HIGHLIGHTS, INTERVALS, NATURAL_PITCHES, NOTES, OPEN_MIDI, OPEN_NOTES, SCALES, SOLFEGE, STRING_NAMES, deriveVoicings, intervalDegreeLabel, noteAt, parseChordDegrees, parseChordInput } from './lib/musicTheory'
 import type { ChordType, ScaleType } from './lib/musicTheory'
 import type { PracticeSession, StageResult } from './lib/practiceProfile'
@@ -41,6 +45,7 @@ const MelodyAccompanimentLessonPage = lazy(() => import('./features/beginner/Mel
 const DailyPracticePage = lazy(() => import('./features/daily/DailyPracticePage').then((module) => ({ default: module.DailyPracticePage })))
 const AssessmentPage = lazy(() => import('./features/assessment/AssessmentPage').then((module) => ({ default: module.AssessmentPage })))
 const ProgressReportModal = lazy(() => import('./features/report/ProgressReportModal').then((module) => ({ default: module.ProgressReportModal })))
+const LeaderboardPage = lazy(() => import('./features/leaderboard/LeaderboardPage').then((module) => ({ default: module.LeaderboardPage })))
 
 function TargetQuestionMark() {
   return <svg className="target-question-mark" viewBox="0 0 96 96" aria-hidden="true" focusable="false">
@@ -50,6 +55,7 @@ function TargetQuestionMark() {
 }
 
 function App() {
+  const isBilibiliToy=useMemo(isBilibiliToyEnvironment,[])
   const initialPreferences = useMemo(loadPreferences, [])
   const initialPracticeProfile = useMemo(loadPracticeProfile, [])
   const [practiceProfile,setPracticeProfile]=useState(initialPracticeProfile)
@@ -60,6 +66,9 @@ function App() {
   const [assessmentQuestionNumber,setAssessmentQuestionNumber]=useState(1)
   const [assessmentResult,setAssessmentResult]=useState<StageResult[]|null>(null)
   const [reportOpen,setReportOpen]=useState(false)
+  const [cloudSyncState,setCloudSyncState]=useState<'checking'|'synced'|'local'|'syncing'|'error'>('checking')
+  const [cloudSyncReady,setCloudSyncReady]=useState(false)
+  const [posterState,setPosterState]=useState<'idle'|'saving'|'saved'|'error'>('idle')
   const [assessmentFretRange,setAssessmentFretRange]=useState<{min:number;max:number}|null>(null)
   const {bpm:metronomeBpm,setBpm:setMetronomeBpm,playing:metronomePlaying,setPlaying:setMetronomePlaying,beat:metronomeBeat,playMetronomeClick}=useMetronome()
   const [learningView, setLearningView] = useState<LearningView>('explore')
@@ -79,6 +88,8 @@ function App() {
   const [trainingType, setTrainingType] = useState<TrainingType>('locate')
   const [questionPosition, setQuestionPosition] = useState({ string: 0, fret: 1 })
   const [targetString, setTargetString] = useState(0)
+  const [adaptiveMode, setAdaptiveMode] = useState<'position' | 'range' | 'string'>('range')
+  const [adaptiveFretRange, setAdaptiveFretRange] = useState<{min:number;max:number} | null>(null)
   const [targetInterval, setTargetInterval] = useState(7)
   const [trainingGoalOffset, setTrainingGoalOffset] = useState(0)
   const [arpeggioPath, setArpeggioPath] = useState<Array<{string:number;fret:number}>>([])
@@ -169,6 +180,31 @@ function App() {
   useEffect(()=>{positionStatsRef.current=positionStats},[positionStats])
   useEffect(()=>{questionPositionRef.current=questionPosition},[questionPosition])
 
+  useEffect(()=>{
+    if(!isBilibiliToy){setCloudSyncState('local');return}
+    let alive=true
+    loadCloudSnapshot().then((snapshot)=>{
+      if(!alive)return
+      if(!snapshot){setCloudSyncState('local');setCloudSyncReady(true);return}
+      if(snapshot.updatedAt>getLocalSyncAt()){
+        setMinFret(snapshot.preferences.minFret);setMaxFret(snapshot.preferences.maxFret);setActiveStrings(snapshot.preferences.activeStrings);setFretboardStyle(snapshot.preferences.fretboardStyle);setSoundOn(snapshot.preferences.soundOn);setNoiseGate(snapshot.preferences.noiseGate);setStability(snapshot.preferences.stability);setNoteNotation(snapshot.preferences.noteNotation)
+        setPositionStats(snapshot.positionStats);setPracticeProfile(snapshot.practiceProfile)
+      }
+      setCloudSyncState('synced');setCloudSyncReady(true)
+    }).catch(()=>{if(alive){setCloudSyncState('error');setCloudSyncReady(true)}})
+    return()=>{alive=false}
+  },[isBilibiliToy])
+
+  useEffect(()=>{
+    if(!isBilibiliToy||!cloudSyncReady)return
+    const timer=window.setTimeout(()=>{
+      const preferences:Preferences={minFret,maxFret,activeStrings,fretboardStyle,soundOn,noiseGate,stability,noteNotation}
+      setCloudSyncState('syncing')
+      saveCloudSnapshot({preferences,positionStats,practiceProfile}).then((ok)=>setCloudSyncState(ok?'synced':'local')).catch(()=>setCloudSyncState('error'))
+    },1200)
+    return()=>window.clearTimeout(timer)
+  },[activeStrings,cloudSyncReady,fretboardStyle,isBilibiliToy,maxFret,minFret,noiseGate,noteNotation,positionStats,practiceProfile,soundOn,stability])
+
   const nextTarget = useCallback((current?: string) => {
     const pool = availableNotes.filter((note) => note !== current)
     const next = pool[Math.floor(Math.random() * pool.length)] || availableNotes[0] || 'C'
@@ -179,7 +215,7 @@ function App() {
     const enabled = activeStrings.map((on, index) => on ? index : -1).filter((index) => index >= 0)
     const string = enabled[Math.floor(Math.random() * enabled.length)] ?? 0
     const fret = minFret + Math.floor(Math.random() * (maxFret - minFret + 1))
-    setFoundPositions([]); setArpeggioStep(0); questionStartedRef.current = Date.now();questionWrongRef.current=0;questionActiveRef.current=true
+    setFoundPositions([]); setArpeggioStep(0); setAdaptiveFretRange(null); questionStartedRef.current = Date.now();questionWrongRef.current=0;questionActiveRef.current=true
     if (trainingType === 'positionAssessment') {
       const ranges=[{min:1,max:4},{min:5,max:8},{min:9,max:12}],range=assessmentStep!==null?ranges[assessmentRangeIndexRef.current++%ranges.length]:ranges[Math.floor(Math.random()*ranges.length)]
       const assessmentFret=range.min+Math.floor(Math.random()*(range.max-range.min+1))
@@ -188,7 +224,16 @@ function App() {
       const positions = enabled.flatMap((s)=>Array.from({length:maxFret-minFret+1},(_,i)=>({string:s,fret:minFret+i})))
       const weighted = positions.map((position)=>{ const stat=positionStats[`${position.string}-${position.fret}`]; const total=(stat?.correct||0)+(stat?.wrong||0); const error=total?(stat?.wrong||0)/total:.45; const slow=Math.min(1,(stat?.averageMs||2500)/6000); const stale=Math.min(1,(Date.now()-(stat?.lastSeen||0))/(1000*60*60*24*7)); return {position,weight:1+error*5+slow*2+stale} })
       const totalWeight=weighted.reduce((sum,item)=>sum+item.weight,0); let roll=Math.random()*totalWeight; const selected=weighted.find((item)=>(roll-=item.weight)<=0)?.position||{string,fret}
-      setQuestionPosition(selected); setTargetString(selected.string); setTarget(noteAt(selected.string,selected.fret))
+      const ranges=FRET_POSITIONS.map(({start,end})=>({min:Math.max(minFret,start),max:Math.min(maxFret,end)})).filter((range)=>range.min<=range.max)
+      const rangeWeights=ranges.map((range)=>({range,weight:weighted.filter((item)=>item.position.fret>=range.min&&item.position.fret<=range.max).reduce((sum,item)=>sum+item.weight,0)})).filter((item)=>item.weight>0)
+      let rangeRoll=Math.random()*rangeWeights.reduce((sum,item)=>sum+item.weight,0); const selectedRange=rangeWeights.find((item)=>(rangeRoll-=item.weight)<=0)?.range||{min:minFret,max:maxFret}
+      const modeRoll=Math.random()
+      const mode=modeRoll<.45?'position':modeRoll<.85?'range':'string'
+      const rangeCandidates=weighted.filter((item)=>item.position.fret>=selectedRange.min&&item.position.fret<=selectedRange.max)
+      let rangePosition=selected
+      if(rangeCandidates.length){let localRoll=Math.random()*rangeCandidates.reduce((sum,item)=>sum+item.weight,0);rangePosition=rangeCandidates.find((item)=>(localRoll-=item.weight)<=0)?.position||selected}
+      const base=mode==='range'?rangePosition:selected
+      setAdaptiveMode(mode); setAdaptiveFretRange(mode==='range'?selectedRange:null); setQuestionPosition(base); setTargetString(base.string); setTarget(noteAt(base.string,base.fret))
     } else if (trainingType === 'scaleDegree' || trainingType === 'chordTone') {
       const offsets = trainingType === 'scaleDegree' ? SCALES[scaleType].intervals : [...CHORD_TYPES[chordType].intervals]
       const offset = offsets[Math.floor(Math.random()*offsets.length)] || 0
@@ -240,6 +285,21 @@ function App() {
   const selectInput = useCallback((selectedId?: string) => {
     setLiveFretboardMap(false); void connectInput(selectedId)
   }, [connectInput])
+
+  const saveDailyPoster = async () => {
+    if (posterState === 'saving') return
+    setPosterState('saving')
+    try {
+      const base64Data = await createDailyPoster({score,accuracy,correct,attempts,streakDays:currentDailyStreak(practiceProfile.history),positionStats,noteAt:displayNoteAt})
+      await savePosterImage(base64Data)
+      setPosterState('saved')
+      window.setTimeout(()=>setPosterState('idle'),2200)
+    } catch (error) {
+      console.warn('[poster] save failed', error)
+      setPosterState('error')
+      window.setTimeout(()=>setPosterState('idle'),2200)
+    }
+  }
 
   const startGame = () => {
     setScore(0); setStreak(0); setBestStreak(0); setCorrect(0); setAttempts(0)
@@ -398,7 +458,7 @@ function App() {
       setTimeLeft((time) => {
         if (time <= 1) {
           if(assessmentStep!==null)return 0
-          if (dailyStep !== null) {const plan=practiceProfileRef.current.dailyPlan;captureProgramStage(plan[dailyStep].type);if(dailyStep < plan.length-1){setStatus('idle');setDailyStep((step)=>step===null?null:step+1);return Math.round(plan[dailyStep+1].minutes*60)}const stages=[...programResultsRef.current],session:PracticeSession={kind:'daily',completedAt:Date.now(),score:scoreRef.current,accuracy:Math.round(stages.reduce((sum,item)=>sum+item.correct,0)/Math.max(1,stages.reduce((sum,item)=>sum+item.attempts,0))*100),stages};setPracticeProfile((profile)=>updatePracticeProfile(profile,session,positionStatsRef.current));setStatus('finished');return 0}
+          if (dailyStep !== null) {const plan=practiceProfileRef.current.dailyPlan;captureProgramStage(plan[dailyStep].type);if(dailyStep < plan.length-1){setStatus('idle');setDailyStep((step)=>step===null?null:step+1);return Math.round(plan[dailyStep+1].minutes*60)}const stages=[...programResultsRef.current],session:PracticeSession={kind:'daily',completedAt:Date.now(),score:scoreRef.current,accuracy:Math.round(stages.reduce((sum,item)=>sum+item.correct,0)/Math.max(1,stages.reduce((sum,item)=>sum+item.attempts,0))*100),stages};void submitDailyRank(session,practiceProfileRef.current.history).catch((error)=>console.warn('[leaderboard] submit failed',error));setPracticeProfile((profile)=>updatePracticeProfile(profile,session,positionStatsRef.current));setStatus('finished');return 0}
           setStatus('finished'); return 0
         }
         return time - 1
@@ -455,11 +515,20 @@ function App() {
     const expectedAllNotes = trainingType === 'allNotes' ? activeStrings.flatMap((on,s) => on ? [0,...Array.from({length:maxFret-minFret+1},(_,i)=>i+minFret)].filter((fret,index,frets)=>frets.indexOf(fret)===index).map((fret)=>({string:s,fret})).filter((p)=>noteAt(p.string,p.fret)===target) : []) : []
     const anchorMidi = OPEN_MIDI[questionPosition.string] + questionPosition.fret
     const clickedMidi = OPEN_MIDI[string] + fret
+    const adaptiveCorrect = trainingType === 'adaptive'
+      ? adaptiveMode === 'position'
+        ? string === questionPosition.string && fret === questionPosition.fret
+        : adaptiveMode === 'string'
+        ? chosen === target && string === targetString
+        : chosen === target && (!adaptiveFretRange || (fret >= adaptiveFretRange.min && fret <= adaptiveFretRange.max))
+      : false
     const isCorrect = trainingType === 'earLocate'
       ? clickedMidi === anchorMidi
+      : trainingType === 'adaptive'
+      ? adaptiveCorrect
       : trainingType === 'octave' || trainingType === 'interval' || trainingType === 'intervalShape'
       ? clickedMidi - anchorMidi === targetInterval && (trainingType !== 'intervalShape' || string === targetString)
-      : chosen === target && (!['stringLocate','adaptive','scaleDegree','chordTone'].includes(trainingType) || string === targetString)
+      : chosen === target && (!['stringLocate','scaleDegree','chordTone'].includes(trainingType) || string === targetString)
     const positionKey = `${string}-${fret}`
     const firstTry=questionWrongRef.current===0
     const questionMastery=recordQuestionPerformance(isCorrect)
@@ -533,6 +602,21 @@ function App() {
   const accuracy = attempts ? Math.round(correct / attempts * 100) : 0
   const allNotesTargetCount = trainingType === 'allNotes' ? activeStrings.reduce((total,on,string)=>on?total+[0,...Array.from({length:maxFret-minFret+1},(_,i)=>i+minFret)].filter((fret,index,frets)=>frets.indexOf(fret)===index&&noteAt(string,fret)===target).length:total,0) : 0
   const positionAssessmentActive=assessmentStep!==null&&trainingType==='positionAssessment'
+  const adaptiveRangeActive=trainingType==='adaptive'&&adaptiveMode==='range'&&adaptiveFretRange
+  const adaptiveHint=adaptiveMode==='position'?`薄弱位置复习 · 点中第 ${questionPosition.string+1} 弦 ${questionPosition.fret} 品的 ${displayTarget}`:adaptiveMode==='string'?`薄弱位置复习 · 第 ${targetString+1} 弦寻找 ${displayTarget}`:adaptiveFretRange?`薄弱把位复习 · 在 ${adaptiveFretRange.min}-${adaptiveFretRange.max} 品寻找 ${displayTarget}`:`薄弱位置复习 · 寻找 ${displayTarget}`
+  const recommendedType = (Object.entries(practiceProfile.weakness).sort((a,b)=>(b[1]??0)-(a[1]??0))[0]?.[0] as TrainingType | undefined) || trainingType
+  const recommendedLesson: { view: LearningView; label: string } = ['earLocate'].includes(recommendedType)
+    ? {view:'ear',label:'听音学习'}
+    : ['interval','intervalShape','octave'].includes(recommendedType)
+      ? {view:'interval',label:'音程关系讲解'}
+      : recommendedType === 'scaleDegree'
+        ? {view:'scales',label:'音阶关系讲解'}
+        : ['chordTone','arpeggio'].includes(recommendedType)
+          ? {view:'chords',label:'和弦关系讲解'}
+          : {view:'explore',label:'指板位置讲解'}
+  const openRecommendedLesson = () => {
+    setDailyStep(null);setLearningView(recommendedLesson.view);setAppMode('learning');setStatus('idle')
+  }
   const visibleMinFret = positionAssessmentActive ? 1 : appMode === 'training' ? minFret : 1
   const visibleMaxFret = positionAssessmentActive || (appMode === 'learning' && learningView === 'explore') ? 12 : appMode === 'training' ? maxFret : 15
   const visibleFretCount = visibleMaxFret - visibleMinFret + 1
@@ -640,17 +724,18 @@ function App() {
           <button className={appMode === 'beginner' ? 'nav-active' : ''} onClick={() => { setDailyStep(null); setBeginnerLesson('anatomy'); setAppMode('beginner'); setStatus('idle') }}>零基础</button>
           <button className={appMode === 'training' && dailyStep === null ? 'nav-active' : ''} onClick={() => { setDailyStep(null); setAppMode('training'); setStatus('idle') }}>训练场</button>
           <button className={appMode === 'learning' ? 'nav-active' : ''} onClick={() => { setDailyStep(null); setAppMode('learning'); setStatus('idle') }}>学习模式</button>
-          <button className={appMode === 'chords' ? 'nav-active' : ''} onClick={() => { setDailyStep(null); setAppMode('chords'); setStatus('idle') }}>和弦推导</button>
+          <button className={appMode === 'chords' ? 'nav-active' : ''} onClick={()=>{setDailyStep(null);setAppMode('chords');setStatus('idle')}}>和弦推导</button>
           <button className={appMode === 'metronome' ? 'nav-active' : ''} onClick={() => { setDailyStep(null); setAppMode('metronome'); setStatus('idle') }}>节拍器</button>
         </nav>
         <div className="header-actions">
+          {isBilibiliToy&&<span className={`cloud-sync-pill ${cloudSyncState}`}>{cloudSyncState==='synced'?'云同步':cloudSyncState==='syncing'?'同步中':cloudSyncState==='checking'?'检查云端':cloudSyncState==='error'?'云同步失败':'本机模式'}</span>}
+          <button className={`settings-btn leaderboard-open ${appMode === 'leaderboard' ? 'active' : ''}`} onClick={() => { setDailyStep(null); setAppMode('leaderboard'); setStatus('idle') }}><Trophy size={17}/> 排行榜</button>
           <button className="settings-btn report-open" onClick={()=>setReportOpen(true)}><BarChart3 size={17}/> 报告</button>
-          <button className="icon-btn" onClick={() => setSoundOn(!soundOn)} aria-label="声音"><Volume2 size={18} className={!soundOn ? 'muted' : ''}/></button>
           <button className="settings-btn" onClick={() => setSettingsOpen(true)}><Settings2 size={17}/> 设置</button>
         </div>
       </header>
 
-      {reportOpen&&<Suspense fallback={null}><ProgressReportModal profile={practiceProfile} positionStats={positionStats} fretboardStyle={fretboardStyle} onClose={()=>setReportOpen(false)}/></Suspense>} 
+      {reportOpen&&<Suspense fallback={null}><ProgressReportModal profile={practiceProfile} positionStats={positionStats} fretboardStyle={fretboardStyle} isBilibiliToy={isBilibiliToy} onClose={()=>setReportOpen(false)}/></Suspense>} 
 
       {((appMode === 'training' && status === 'playing') || (appMode === 'learning' && ['explore','interval','scales'].includes(learningView))) && !manualLandscape && <div className="portrait-orientation-guard" role="dialog" aria-modal="true" aria-label="请横屏使用指板"><div className="rotate-phone"><Smartphone size={42}/><i>↻</i></div><strong>请将手机横过来</strong><p>如果手机锁定了方向，也可以手动进入横屏视图<br/>不需要去系统设置里取消锁定</p><div className="orientation-actions"><button className="manual-landscape-btn" onClick={()=>setManualLandscape(true)}><RotateCw size={14}/> 手动横屏</button><button onClick={()=>setSettingsOpen(true)}><Settings2 size={14}/> 打开设置</button></div></div>}
       {manualLandscape && <button className="manual-landscape-exit" onClick={()=>setManualLandscape(false)} aria-label="退出手动横屏"><X size={15}/> 退出横屏</button>}
@@ -660,13 +745,13 @@ function App() {
       {appMode === 'training' && assessmentStep !== null && <DailySessionBar stages={ASSESSMENT_STAGES} step={assessmentStep} timeLeft={timeLeft} label="首次能力诊断" questionIndex={assessmentQuestionNumber} questionTotal={5} onExit={exitAssessment}/>} 
 
       {appMode !== 'beginner' && <section className="hero">
-        <div className="eyebrow"><Sparkles size={14}/> {appMode === 'assessment' ? '先诊断，再制定真正适合你的课程' : appMode === 'daily' ? '定位、关系、应用与听觉，一次完成' : appMode === 'metronome' ? '为节拍、分解和即兴提供稳定速度' : appMode === 'chords' ? '从组成音推导可弹奏的吉他指法' : learningTheory ? '理解规则，才能更快记住指板' : learningScale ? '看见音阶在整块指板上的形状' : appMode === 'learning' ? '观察、聆听，熟悉音符之间的关系' : '每天 5 分钟，认识整块指板'}</div>
-        <h1>{appMode === 'assessment' ? assessmentResult?'诊断分析':'能力诊断' : appMode === 'daily' ? '今日混合练习' : appMode === 'metronome' ? '练琴节拍器' : appMode === 'chords' ? '吉他和弦推导' : learningTheory ? '吉他基础乐理' : learningScale ? '音阶练习' : appMode === 'learning' ? '自由探索指板' : status === 'finished' ? dailyStep !== null ? '今日练习完成' : '本局完成' : '找到这个音'}</h1>
+        <div className="eyebrow"><Sparkles size={14}/> {appMode === 'assessment' ? '先诊断，再制定真正适合你的课程' : appMode === 'daily' ? '定位、关系、应用与听觉，一次完成' : appMode === 'leaderboard' ? '每日成绩与打卡记录' : appMode === 'metronome' ? '为节拍、分解和即兴提供稳定速度' : appMode === 'chords' ? '从组成音推导可弹奏的吉他指法' : learningTheory ? '理解规则，才能更快记住指板' : learningScale ? '看见音阶在整块指板上的形状' : appMode === 'learning' ? '观察、聆听，熟悉音符之间的关系' : '每天 5 分钟，认识整块指板'}</div>
+        <h1>{appMode === 'assessment' ? assessmentResult?'诊断分析':'能力诊断' : appMode === 'daily' ? '今日混合练习' : appMode === 'leaderboard' ? '练习排行榜' : appMode === 'metronome' ? '练琴节拍器' : appMode === 'chords' ? '吉他和弦推导' : learningTheory ? '吉他基础乐理' : learningScale ? '音阶练习' : appMode === 'learning' ? '自由探索指板' : status === 'finished' ? dailyStep !== null ? '今日练习完成' : '本局完成' : '找到这个音'}</h1>
         {appMode === 'chords' && <div className="scale-heading"><strong>{displayNotes[effectiveRoot]}{effectiveSuffix}</strong><small>{effectiveName} · {effectiveFormula} · {chordNotes.map((note)=>formatNote(note,noteNotation)).join(' · ')}</small></div>}
         {learningTheory && <div className="scale-heading"><strong>{theoryLesson === 'notes' ? '认识十二个音' : theoryLesson === 'intervals' ? '理解音程距离' : '音名与唱名转换'}</strong><small>{theoryLesson === 'notes' ? '从 C 到 B，读懂指板上的语言' : theoryLesson === 'intervals' ? '两个音之间的距离，构成旋律与和弦' : 'C D E F G A B ↔ 1 2 3 4 5 6 7'}</small></div>}
         {learningScale && <div className="scale-heading"><strong>{displayNotes[scaleRoot]} {SCALES[scaleType].name}</strong><small>{SCALES[scaleType].intervals.map((interval) => displayNotes[(scaleRoot + interval) % 12]).join(' · ')}</small></div>}
         {appMode === 'learning' && !learningScale && !learningTheory && <div className="learning-title"><strong>{learningView === 'ear' ? '听音实验室' : learningView === 'interval' ? '指板音程形状' : learningView === 'chords' ? '和弦推导入门' : learningView === 'caged' ? 'CAGED 和弦形状' : '全音符地图'}</strong><small>{learningView === 'ear' ? '先熟悉、再对比，建立十二音的听觉印象' : learningView === 'interval' ? '用两根弦之间的固定形状，快速建立空间记忆' : learningView === 'chords' ? '用固定音程公式理解大三和弦与小三和弦' : learningView === 'caged' ? '用五个开放和弦形状连接整块指板' : '点击任意音符试听'}</small></div>}
-        {appMode === 'training' && status !== 'finished' && <div className={`target-note ${status === 'idle' ? 'dim' : ''}`}>{status === 'idle' ? <TargetQuestionMark/> : trainingType === 'identify' ? '看指板' : trainingType === 'earLocate' ? <Volume2 size={52}/> : trainingType === 'octave' ? '8度' : trainingType === 'interval' || trainingType === 'intervalShape' ? INTERVALS.find((item)=>item[2]===targetInterval)?.[1] : trainingType === 'scaleDegree' ? `${SCALES[scaleType].intervals.indexOf(trainingGoalOffset)+1}级` : trainingType === 'chordTone' ? ({0:'根音',3:'小三音',4:'大三音',6:'减五音',7:'五音',9:'减七音',10:'小七音',11:'大七音'} as Record<number,string>)[trainingGoalOffset] || `${trainingGoalOffset}半音` : displayTarget}<small>{status === 'idle' ? '准备好了吗' : trainingType === 'identify' ? '选择高亮位置的音名' : trainingType === 'earLocate' ? '听声音，找到相同实际音高的位置' : trainingType === 'adaptive' ? `薄弱位置复习 · 只在第 ${targetString+1} 弦寻找 ${displayTarget}` : trainingType === 'scaleDegree' ? `${displayNotes[scaleRoot]} ${SCALES[scaleType].name} · 第 ${targetString+1} 弦 · 目标音 ${displayTarget}` : trainingType === 'chordTone' ? `${displayNotes[chordRoot]}${CHORD_TYPES[chordType].suffix || 'Major'} · 第 ${targetString+1} 弦 · 目标音 ${displayTarget}` : trainingType === 'arpeggio' ? `按音高上行点击 · ${arpeggioStep}/${arpeggioPath.length}` : trainingType === 'stringLocate' ? `只在第 ${targetString + 1} 弦上寻找` : trainingType === 'allNotes' ? `找出指板上全部 ${displayTarget} · 已找到 ${foundPositions.length} / ${allNotesTargetCount}` : trainingType === 'octave' ? '从根音寻找上方八度音' : trainingType === 'intervalShape' ? `从根音在第 ${targetString+1} 弦复现上行${INTERVALS.find((item)=>item[2]===targetInterval)?.[0]}形状` : trainingType === 'interval' ? `从根音寻找上行${INTERVALS.find((item)=>item[2]===targetInterval)?.[0]}` : '点击指板上的正确位置'}</small>{status === 'playing' && trainingType === 'earLocate' && <div className="ear-reference-actions"><button className="replay-note" onClick={() => playGuitar(questionPosition.string,questionPosition.fret)}><Volume2 size={13}/> 再听目标音</button><button className="reference-note" onClick={() => playGuitar(4,3)} title="固定参考音：5弦3品 C"><Volume2 size={13}/> 参考音 C<small>5弦3品</small></button></div>}</div>}
+        {appMode === 'training' && status !== 'finished' && <div className={`target-note ${status === 'idle' ? 'dim' : ''}`}>{status === 'idle' ? <TargetQuestionMark/> : trainingType === 'identify' ? '看指板' : trainingType === 'earLocate' ? <Volume2 size={52}/> : trainingType === 'octave' ? '八度' : trainingType === 'interval' || trainingType === 'intervalShape' ? INTERVALS.find((item)=>item[2]===targetInterval)?.[0] : trainingType === 'scaleDegree' ? `${SCALES[scaleType].intervals.indexOf(trainingGoalOffset)+1}级` : trainingType === 'chordTone' ? ({0:'根音',3:'小三音',4:'大三音',6:'减五音',7:'五音',9:'减七音',10:'小七音',11:'大七音'} as Record<number,string>)[trainingGoalOffset] || `${trainingGoalOffset}半音` : displayTarget}<small>{status === 'idle' ? '准备好了吗' : trainingType === 'identify' ? '选择高亮位置的音名' : trainingType === 'earLocate' ? '听声音，找到相同实际音高的位置' : trainingType === 'adaptive' ? adaptiveHint : trainingType === 'scaleDegree' ? `${displayNotes[scaleRoot]} ${SCALES[scaleType].name} · 第 ${targetString+1} 弦 · 目标音 ${displayTarget}` : trainingType === 'chordTone' ? `${displayNotes[chordRoot]}${CHORD_TYPES[chordType].suffix || 'Major'} · 第 ${targetString+1} 弦 · 目标音 ${displayTarget}` : trainingType === 'arpeggio' ? `按音高上行点击 · ${arpeggioStep}/${arpeggioPath.length}` : trainingType === 'stringLocate' ? `只在第 ${targetString + 1} 弦上寻找` : trainingType === 'allNotes' ? `找出指板上全部 ${displayTarget} · 已找到 ${foundPositions.length} / ${allNotesTargetCount}` : trainingType === 'octave' ? '从根音寻找上方八度音' : trainingType === 'intervalShape' ? `从根音在第 ${targetString+1} 弦复现上行${INTERVALS.find((item)=>item[2]===targetInterval)?.[0]}形状` : trainingType === 'interval' ? `从根音寻找上行${INTERVALS.find((item)=>item[2]===targetInterval)?.[0]}` : '点击指板上的正确位置'}</small>{status === 'playing' && trainingType === 'earLocate' && <div className="ear-reference-actions"><button className="replay-note" onClick={() => playGuitar(questionPosition.string,questionPosition.fret)}><Volume2 size={13}/> 再听目标音</button><button className="reference-note" onClick={() => playGuitar(4,3)} title="固定参考音：5弦3品 C"><Volume2 size={13}/> 参考音 C<small>5弦3品</small></button></div>}</div>}
         {appMode === 'training' && status === 'finished' && (
           <div className="result-summary">
             <strong>{score.toLocaleString()}</strong><span>分</span>
@@ -679,6 +764,7 @@ function App() {
         <Suspense fallback={<div className="route-loading"><span>LOADING</span><strong>正在加载课程</strong></div>}>
         {appMode === 'assessment' && <AssessmentPage profile={practiceProfile} result={assessmentResult} onStart={startAssessment} onSkip={skipAssessment} onContinue={()=>{setAssessmentResult(null);setAppMode('daily');setStatus('idle')}}/>}
         {appMode === 'daily' && <DailyPracticePage stages={practiceProfile.dailyPlan} onStart={startDailyPractice}/>} 
+        {appMode === 'leaderboard' && <LeaderboardPage profile={practiceProfile} isBilibiliToy={isBilibiliToy} onStartDaily={startDailyPractice}/>} 
         {appMode === 'beginner' && beginnerLesson === 'anatomy' && <GuitarAnatomyPage onNext={()=>setBeginnerLesson('strings')}/>} 
         {appMode === 'beginner' && beginnerLesson === 'strings' && <GuitarStringsLessonPage onBack={()=>setBeginnerLesson('anatomy')} onNext={()=>setBeginnerLesson('notes')} onPlay={playGuitar} renderFretboard={(onStringSelect,activeString)=><Fretboard appMode="learning" status="idle" trainingType={trainingType} style={fretboardStyle} activeStrings={[true,true,true,true,true,true]} stringNames={STRING_NAMES} minFret={1} fretCount={5} activeFretRange={null} targetString={targetString} feedback={null} learningView="explore" learningScale={false} learningCaged={false} scaleRootNote="C" scaleNotes={new Set<string>()} scaleSequenceActive={false} scaleSequenceStep={0} orderedScaleSequence={[]} scalePlaybackPosition={null} scalePlaybackStart={null} liveFretboardMap={false} pitchStable={false} detectedMidi={null} openMidi={OPEN_MIDI} positionStats={positionStats} questionPosition={questionPosition} foundPositions={[]} learningEarRevealed={false} learningEarPosition={learningEarPosition} learningIntervalPair={null} cagedPositions={new Set<string>()} arpeggioPath={[]} arpeggioStep={0} noteAt={noteAt} onChoose={(string,fret)=>{onStringSelect(string);playGuitar(string,fret)}} onScaleClick={(string,fret)=>{onStringSelect(string);playGuitar(string,fret)}} onPlay={playGuitar} onSelectScaleStart={({string,fret})=>{onStringSelect(string);playGuitar(string,fret)}} highlightString={activeString}/>}/>} 
         {appMode === 'beginner' && beginnerLesson === 'notes' && <NoteNamesLessonPage onBack={()=>setBeginnerLesson('strings')} onNext={()=>setBeginnerLesson('tones')} onPlay={playGuitar}/>} 
@@ -694,13 +780,13 @@ function App() {
         {appMode === 'beginner' && beginnerLesson === 'melody-harmony' && <MelodyHarmonyLessonPage onBack={()=>setBeginnerLesson('major-minor')} onNext={()=>setBeginnerLesson('accompaniment')} onPlay={playGuitar}/>} 
         {appMode === 'beginner' && beginnerLesson === 'accompaniment' && <MelodyAccompanimentLessonPage onBack={()=>setBeginnerLesson('melody-harmony')} onNext={()=>setAppMode('chords')} onPlay={playGuitar}/>} 
         {appMode === 'training' && status !== 'playing' && ['locate','stringLocate','adaptive'].includes(trainingType) && <section className="position-practice"><div><span>POSITION PRACTICE</span><strong>按把位练习</strong><small>固定手形覆盖一小段品位，强迫自己离开前五品。</small></div><div className="position-buttons">{FRET_POSITIONS.map((position)=><button key={position.label} className={minFret===position.start&&maxFret===position.end?'selected':''} onClick={()=>{setMinFret(position.start);setMaxFret(position.end)}}><strong>{position.label}</strong><small>{position.start}–{position.end} 品</small></button>)}<button className="position-custom" onClick={()=>setSettingsOpen(true)}><strong>自定义</strong><small>{minFret}–{maxFret} 品</small></button></div></section>}
-        {appMode === 'training' && (status === 'playing' || focusTraining) && <div className="landscape-target-hud"><span>{status === 'finished' ? '训练完成' : '当前目标'}</span><strong>{status === 'finished' ? `${score} 分` : trainingType === 'identify' ? '识别高亮位置' : trainingType === 'earLocate' ? '听音找位置' : trainingType === 'octave' ? '8度' : trainingType === 'interval' ? INTERVALS.find((item)=>item[2]===targetInterval)?.[1] : trainingType === 'scaleDegree' ? `${([...SCALES[scaleType].intervals] as number[]).indexOf(trainingGoalOffset)+1}级 · ${displayTarget}` : trainingType === 'chordTone' ? `${displayTarget} · 和弦内音` : displayTarget}</strong><small>{status === 'finished' ? `${accuracy}%` : trainingType === 'earLocate' ? '参考 C · 5弦3品' : trainingType === 'stringLocate' || trainingType === 'adaptive' || trainingType === 'scaleDegree' || trainingType === 'chordTone' ? `第 ${targetString+1} 弦` : trainingType === 'arpeggio' ? `${arpeggioStep}/${arpeggioPath.length}` : `${timeLeft}秒`}</small>{status === 'playing' && trainingType === 'earLocate' && <div className="landscape-ear-actions"><button onClick={() => playGuitar(questionPosition.string,questionPosition.fret)} aria-label="再听目标音"><Volume2 size={13}/><span>重听</span></button><button onClick={() => playGuitar(4,3)} aria-label="播放参考音 C，5弦3品"><Volume2 size={13}/><span>C 5弦3品</span></button></div>}{focusTraining && <button onClick={exitFocusTraining} aria-label="退出全屏训练"><X size={15}/></button>}</div>}
+        {appMode === 'training' && (status === 'playing' || focusTraining) && <div className="landscape-target-hud"><span>{status === 'finished' ? '训练完成' : '当前目标'}</span><strong>{status === 'finished' ? `${score} 分` : trainingType === 'identify' ? '识别高亮位置' : trainingType === 'earLocate' ? '听音找位置' : trainingType === 'octave' ? '八度' : trainingType === 'interval' ? INTERVALS.find((item)=>item[2]===targetInterval)?.[0] : trainingType === 'scaleDegree' ? `${([...SCALES[scaleType].intervals] as number[]).indexOf(trainingGoalOffset)+1}级 · ${displayTarget}` : trainingType === 'chordTone' ? `${displayTarget} · 和弦内音` : displayTarget}</strong><small>{status === 'finished' ? `${accuracy}%` : trainingType === 'earLocate' ? '参考 C · 5弦3品' : trainingType === 'adaptive' ? (adaptiveMode==='range'&&adaptiveFretRange?`${adaptiveFretRange.min}-${adaptiveFretRange.max}品`:adaptiveMode==='position'?`${questionPosition.fret}品`: `第 ${targetString+1} 弦`) : trainingType === 'stringLocate' || trainingType === 'scaleDegree' || trainingType === 'chordTone' ? `第 ${targetString+1} 弦` : trainingType === 'arpeggio' ? `${arpeggioStep}/${arpeggioPath.length}` : `${timeLeft}秒`}</small>{status === 'playing' && trainingType === 'earLocate' && <div className="landscape-ear-actions"><button onClick={() => playGuitar(questionPosition.string,questionPosition.fret)} aria-label="再听目标音"><Volume2 size={13}/><span>重听</span></button><button onClick={() => playGuitar(4,3)} aria-label="播放参考音 C，5弦3品"><Volume2 size={13}/><span>C 5弦3品</span></button></div>}{focusTraining && <button onClick={exitFocusTraining} aria-label="退出全屏训练"><X size={15}/></button>}</div>}
         {appMode === 'training' && status === 'idle' && ['scaleDegree','chordTone','arpeggio'].includes(trainingType) && <div className="applied-training-controls">
           <span>训练内容</span><label>根音<select value={trainingType === 'scaleDegree' ? scaleRoot : chordRoot} onChange={(e)=>trainingType === 'scaleDegree' ? setScaleRoot(Number(e.target.value)) : setChordRoot(Number(e.target.value))}>{NOTES.map((note,index)=><option key={note} value={index}>{note}</option>)}</select></label>
           {trainingType === 'scaleDegree' ? <label>音阶<select value={scaleType} onChange={(e)=>setScaleType(e.target.value as ScaleType)}>{Object.entries(SCALES).map(([key,value])=><option key={key} value={key}>{value.name}</option>)}</select></label> : <label>和弦<select value={chordType} onChange={(e)=>setChordType(e.target.value as ChordType)}>{Object.entries(CHORD_TYPES).map(([key,value])=><option key={key} value={key}>{value.name}</option>)}</select></label>}
         </div>}
         {appMode === 'metronome' && <Metronome bpm={metronomeBpm} playing={metronomePlaying} beat={metronomeBeat} onBpmChange={setMetronomeBpm} onPlayingChange={setMetronomePlaying}/>} 
-        {appMode === 'learning' && <LearningToolbar view={learningView} onChange={setLearningView}/>}
+        {appMode === 'learning' && <LearningToolbar view={learningView} onChange={setLearningView}/>} 
         {appMode === 'learning' && learningView === 'explore' && <section className="explore-map-panel">
           <div className="explore-map-head">
             <div><span>FRETBOARD EXPLORER</span><h2>从 12 平均律生成整块指板</h2><p>选择一根弦，看空弦音如何每前进一品升高一个半音。可以隐藏升号音，只保留 C D E F G A B。</p></div>
@@ -772,7 +858,7 @@ function App() {
             <div className="chromatic-notes">{NOTES.map((note, index) => <button key={note} className={!note.includes('♯') ? 'natural' : ''} onClick={() => playGuitar(5, ((index - OPEN_NOTES[5] + 12) % 12) || 12)}><strong>{note}</strong><small>{note.includes('♯') ? '升音' : '自然音'}</small></button>)}</div>
           </div> : theoryLesson === 'intervals' ? <div className="interval-lesson">
             <div className="interval-builder"><span className="lesson-number">INTERVAL BUILDER</span><h2>{NOTES[intervalRoot]} → {NOTES[(intervalRoot + selectedInterval) % 12]}</h2><strong>{INTERVALS.find((item) => item[2] === selectedInterval)?.[0]}</strong><p>{selectedInterval} 个半音 · 同一根弦上相隔 {selectedInterval} 品</p><div><select value={intervalRoot} onChange={(e) => setIntervalRoot(Number(e.target.value))}>{NOTES.map((note, i) => <option key={note} value={i}>{note}</option>)}</select><button onClick={() => { const fret = ((intervalRoot - 4 + 12) % 12) || 12; playGuitar(5, fret); window.setTimeout(() => playGuitar(5, fret + selectedInterval), 550) }}><Play size={15}/> 试听音程</button></div></div>
-            <div className="interval-grid">{INTERVALS.map(([name, symbol, semitones]) => <button key={symbol} className={selectedInterval === semitones ? 'selected' : ''} onClick={() => setSelectedInterval(semitones)}><span>{symbol}</span><strong>{name}</strong><small>{semitones} 半音</small></button>)}</div>
+            <div className="interval-grid">{INTERVALS.map(([name, , semitones]) => <button key={name} className={selectedInterval === semitones ? 'selected' : ''} onClick={() => setSelectedInterval(semitones)}><span>{semitones} 半音</span><strong>{name}</strong><small>{semitones === 0 ? '同音' : semitones === 12 ? '八度重复' : '从根音向上数'}</small></button>)}</div>
           </div> : <div className="solfege-lesson">
             <div className="solfege-guide"><span className="lesson-number">FIXED DO · 固定调</span><h2>音名、简谱与唱名</h2><p>固定调中，C 永远唱 Do、写作 1。音名表示音的身份，唱名帮助开口唱，数字简谱便于记录旋律。</p><div className="solfege-map">{SOLFEGE.map((item) => <button key={item.note} onClick={() => playGuitar(5, ((item.noteIndex - OPEN_NOTES[5] + 12) % 12) || 12)}><strong>{item.note}</strong><span>{item.number}</span><small>{item.name}</small></button>)}</div><div className="tip"><strong>记忆口诀</strong><span>CDEFGAB 对应 1234567，也就是 Do Re Mi Fa Sol La Si。</span></div></div>
             <div className="solfege-quiz">
@@ -785,19 +871,21 @@ function App() {
           </div>}
         </section>}
         {learningScale && <ScaleControls notes={NOTES} root={scaleRoot} scales={Object.entries(SCALES).map(([value, scale]) => ({value,name:scale.name}))} scaleType={scaleType} playbackActive={scalePlaybackActive} bpm={scalePlaybackBpm} bpmDraft={scalePlaybackBpmDraft} metronome={scalePlaybackMetronome} focus={scaleFocus} sequenceActive={scaleSequenceActive} sequenceAvailable={Boolean(scaleSequence.length)} descending={scaleDescending} error={scalePlaybackError} onRootChange={(root) => {stopScalePlayback();setScalePlaybackStart(null);setScalePlaybackError('');setScaleRoot(root)}} onScaleTypeChange={(type) => setScaleType(type as ScaleType)} onTogglePlayback={scalePlaybackActive ? stopScalePlayback : playCurrentScale} onBpmDraftChange={setScalePlaybackBpmDraft} onBpmCommit={commitScalePlaybackBpm} onMetronomeChange={setScalePlaybackMetronome} onToggleFocus={scaleFocus ? exitScaleFocus : enterScaleFocus} onToggleSequence={() => {setScaleSequenceActive(!scaleSequenceActive);setScaleSequenceStep(0)}} onToggleDirection={() => {setScaleDescending(!scaleDescending);setScaleSequenceStep(0)}}/>}
-        {appMode !== 'assessment' && appMode !== 'daily' && appMode !== 'beginner' && appMode !== 'theory' && !learningTheory && !learningCaged && appMode !== 'chords' && appMode !== 'metronome' && <AudioInputPanel state={inputState} devices={inputDevices} deviceId={deviceId} inputLevel={inputLevel} pitchStable={pitchStable} detectedNote={detectedNote} detectedHz={detectedHz} detectedCents={detectedCents} error={inputError} liveMap={liveFretboardMap} calibrationOpen={calibrationOpen} noiseGate={noiseGate} stability={stability} onConnect={selectInput} onDisconnect={disconnectInput} onLiveMapChange={setLiveFretboardMap} onCalibrationOpenChange={setCalibrationOpen} onNoiseGateChange={setNoiseGate} onStabilityChange={setStability}/>} 
+        {appMode !== 'assessment' && appMode !== 'daily' && appMode !== 'beginner' && appMode !== 'theory' && !learningTheory && !learningCaged && appMode !== 'chords' && appMode !== 'metronome' && appMode !== 'leaderboard' && <AudioInputPanel state={inputState} devices={inputDevices} deviceId={deviceId} inputLevel={inputLevel} pitchStable={pitchStable} detectedNote={detectedNote} detectedHz={detectedHz} detectedCents={detectedCents} error={inputError} liveMap={liveFretboardMap} calibrationOpen={calibrationOpen} noiseGate={noiseGate} stability={stability} onConnect={selectInput} onDisconnect={disconnectInput} onLiveMapChange={setLiveFretboardMap} onCalibrationOpenChange={setCalibrationOpen} onNoiseGateChange={setNoiseGate} onStabilityChange={setStability}/>} 
         {appMode === 'training' && <TrainingStats timeLeft={timeLeft} score={score} streak={streak}/>}
 
-        {appMode !== 'assessment' && appMode !== 'daily' && appMode !== 'beginner' && appMode !== 'theory' && !learningTheory && appMode !== 'chords' && appMode !== 'metronome' && !(appMode === 'learning' && learningView === 'ear') && <Fretboard appMode={appMode} status={status} trainingType={trainingType} style={fretboardStyle} activeStrings={activeStrings} stringNames={STRING_NAMES} minFret={visibleMinFret} fretCount={visibleFretCount} activeFretRange={positionAssessmentActive?assessmentFretRange:null} targetString={targetString} feedback={feedback} learningView={learningView} learningScale={learningScale} learningCaged={learningCaged} scaleRootNote={NOTES[scaleRoot]} scaleNotes={scaleNotes} scaleSequenceActive={scaleSequenceActive} scaleSequenceStep={scaleSequenceStep} orderedScaleSequence={orderedScaleSequence} scalePlaybackPosition={scalePlaybackPosition} scalePlaybackStart={scalePlaybackStart} liveFretboardMap={liveFretboardMap} pitchStable={pitchStable} detectedMidi={detectedMidi} openMidi={OPEN_MIDI} positionStats={positionStats} questionPosition={questionPosition} foundPositions={foundPositions} learningEarRevealed={learningEarRevealed} learningEarPosition={learningEarPosition} learningIntervalPair={learningIntervalPair} cagedPositions={cagedPositions} arpeggioPath={arpeggioPath} arpeggioStep={arpeggioStep} noteAt={noteAt} onChoose={(string,fret)=>{if(appMode==='learning'&&learningView==='explore'){setExploreAnimating(false);setExploreSelectedString(string);setExploreAnimationStep(Math.min(fret,12))}choose(string,fret)}} onScaleClick={handleScaleSequenceClick} onPlay={playGuitar} onSelectScaleStart={({string,fret})=>{setScalePlaybackStart({string,fret});setScalePlaybackError('');stopScalePlayback()}} highlightString={appMode==='learning'&&learningView==='explore'?exploreSelectedString:undefined} lessonActivePosition={appMode==='learning'&&learningView==='explore'?{string:exploreSelectedString,fret:Math.min(exploreAnimationStep,12)}:appMode==='learning'&&learningView==='chords'?learningChordPositions.anchor:null} lessonNaturalPositions={appMode==='learning'&&learningView==='explore'?explorePositions:appMode==='learning'&&learningView==='chords'?learningChordPositions.positions:undefined} lessonDegreeLabels={appMode==='learning'&&learningView==='chords'?learningChordPositions.labels:undefined} lessonChordFrets={appMode==='learning'&&learningView==='chords'?learningChordPositions.frets:undefined} lessonChordDegreeByPitch={appMode==='learning'&&learningView==='chords'?learningChordPositions.degreeByPitch:undefined}/>} 
+        {appMode !== 'assessment' && appMode !== 'daily' && appMode !== 'beginner' && appMode !== 'theory' && !learningTheory && appMode !== 'chords' && appMode !== 'metronome' && appMode !== 'leaderboard' && !(appMode === 'learning' && learningView === 'ear') && <Fretboard appMode={appMode} status={status} trainingType={trainingType} style={fretboardStyle} activeStrings={activeStrings} stringNames={STRING_NAMES} minFret={visibleMinFret} fretCount={visibleFretCount} activeFretRange={positionAssessmentActive?assessmentFretRange:adaptiveRangeActive?adaptiveFretRange:null} targetString={targetString} targetStringActive={trainingType==='adaptive'?adaptiveMode!=='range':undefined} feedback={feedback} learningView={learningView} learningScale={learningScale} learningCaged={learningCaged} scaleRootNote={NOTES[scaleRoot]} scaleNotes={scaleNotes} scaleSequenceActive={scaleSequenceActive} scaleSequenceStep={scaleSequenceStep} orderedScaleSequence={orderedScaleSequence} scalePlaybackPosition={scalePlaybackPosition} scalePlaybackStart={scalePlaybackStart} liveFretboardMap={liveFretboardMap} pitchStable={pitchStable} detectedMidi={detectedMidi} openMidi={OPEN_MIDI} positionStats={positionStats} questionPosition={questionPosition} foundPositions={foundPositions} learningEarRevealed={learningEarRevealed} learningEarPosition={learningEarPosition} learningIntervalPair={learningIntervalPair} cagedPositions={cagedPositions} arpeggioPath={arpeggioPath} arpeggioStep={arpeggioStep} noteAt={noteAt} onChoose={(string,fret)=>{if(appMode==='learning'&&learningView==='explore'){setExploreAnimating(false);setExploreSelectedString(string);setExploreAnimationStep(Math.min(fret,12))}choose(string,fret)}} onScaleClick={handleScaleSequenceClick} onPlay={playGuitar} onSelectScaleStart={({string,fret})=>{setScalePlaybackStart({string,fret});setScalePlaybackError('');stopScalePlayback()}} highlightString={appMode==='learning'&&learningView==='explore'?exploreSelectedString:undefined} lessonActivePosition={appMode==='learning'&&learningView==='explore'?{string:exploreSelectedString,fret:Math.min(exploreAnimationStep,12)}:appMode==='learning'&&learningView==='chords'?learningChordPositions.anchor:null} lessonNaturalPositions={appMode==='learning'&&learningView==='explore'?explorePositions:appMode==='learning'&&learningView==='chords'?learningChordPositions.positions:undefined} lessonDegreeLabels={appMode==='learning'&&learningView==='chords'?learningChordPositions.labels:undefined} lessonChordFrets={appMode==='learning'&&learningView==='chords'?learningChordPositions.frets:undefined} lessonChordDegreeByPitch={appMode==='learning'&&learningView==='chords'?learningChordPositions.degreeByPitch:undefined}/>} 
 
         {appMode === 'training' && status === 'playing' && trainingType === 'identify' && <div className="note-answers">{NOTES.map((note,index) => <button key={note} onClick={() => answerIdentification(note)}>{displayNotes[index]}</button>)}</div>}
 
         {appMode === 'training' && status === 'finished' && <WeakReview positionStats={positionStats} noteAt={displayNoteAt}/>} 
         {appMode === 'training' && status === 'finished' && dailyStep !== null && <section className="daily-adjustment"><div><span>ADAPTIVE PLAN UPDATED</span><h3>下一次 10 分钟课程已经调整</h3><p>系统结合本次各阶段正确率、长期错误位置和反应速度，重新分配了练习时间。</p></div><div>{practiceProfile.dailyPlan.map((stage)=><span key={stage.type}><strong>{stage.title}</strong><b>{Number.isInteger(stage.minutes)?`${stage.minutes}:00`:`${Math.floor(stage.minutes)}:${String(Math.round(stage.minutes%1*60)).padStart(2,'0')}`}</b></span>)}</div></section>}
 
-        {appMode !== 'assessment' && appMode !== 'daily' && appMode !== 'beginner' && appMode !== 'theory' && !learningTheory && !learningCaged && appMode !== 'chords' && appMode !== 'metronome' && !(appMode === 'learning' && learningView === 'ear') && <div className="game-actions">
+        {appMode !== 'assessment' && appMode !== 'daily' && appMode !== 'beginner' && appMode !== 'theory' && !learningTheory && !learningCaged && appMode !== 'chords' && appMode !== 'metronome' && appMode !== 'leaderboard' && !(appMode === 'learning' && learningView === 'ear') && <div className="game-actions">
           {appMode === 'training' && status === 'idle' && <><button className="primary" onClick={startGame}>开始训练 <span>60 秒</span></button><button className="focus-launch" onClick={enterFocusTraining}>全屏训练</button></>}
           {appMode === 'training' && status === 'playing' && <><button className="quit" onClick={assessmentStep!==null?exitAssessment:()=>setStatus('finished')}>{assessmentStep!==null?'退出计划':'提前结束'}</button>{assessmentStep!==null&&<button className="skip-assessment-stage" onClick={skipAssessmentStage}>这项不会，跳过</button>}<button className="focus-launch" onClick={enterFocusTraining}>全屏训练</button></>}
+          {appMode === 'training' && status === 'finished' && dailyStep !== null && <button className="share-poster-btn" onClick={saveDailyPoster} disabled={posterState==='saving'}>{posterState==='saving'?'正在生成':posterState==='saved'?'已保存':'保存成绩图'}</button>}
+          {appMode === 'training' && status === 'finished' && <button className="lesson-result-btn" onClick={openRecommendedLesson}>去看{recommendedLesson.label}</button>}
           {appMode === 'training' && status === 'finished' && <button className="primary" onClick={dailyStep!==null?startDailyPractice:startGame}><RotateCcw size={18}/> {dailyStep!==null?'再练 10 分钟':'再来一局'}</button>}
           {appMode === 'learning' && !learningScale && <button className="primary" onClick={() => { setAppMode('training'); setStatus('idle') }}>去训练场检验记忆</button>}
           {learningScale && <button className="primary" onClick={() => {setScaleSequenceActive(true);setScaleSequenceStep(0)}}><Play size={17}/> 开始{scaleDescending?'下行':'上行'}顺序练习</button>}
@@ -808,7 +896,7 @@ function App() {
 
       <footer><span>标准调弦 · E A D G B E</span><span>每天 10 分钟，你也能成为吉他大师</span></footer>
 
-      {settingsOpen && <SettingsModal minFret={minFret} maxFret={maxFret} fretboardStyle={fretboardStyle} activeStrings={activeStrings} stringNames={STRING_NAMES} noteNotation={noteNotation} onMinFretChange={setMinFret} onMaxFretChange={setMaxFret} onFretboardStyleChange={setFretboardStyle} onNoteNotationChange={setNoteNotation} onToggleString={(index) => {if(activeStrings.filter(Boolean).length===1&&activeStrings[index])return;setActiveStrings((all)=>all.map((value,current)=>current===index?!value:value))}} onClearCache={() => {clearLearningData();localStorage.removeItem(PRACTICE_PROFILE_KEY);window.location.reload()}} onClose={() => setSettingsOpen(false)}/>} 
+      {settingsOpen && <SettingsModal minFret={minFret} maxFret={maxFret} fretboardStyle={fretboardStyle} activeStrings={activeStrings} stringNames={STRING_NAMES} noteNotation={noteNotation} onMinFretChange={setMinFret} onMaxFretChange={setMaxFret} onFretboardStyleChange={setFretboardStyle} onNoteNotationChange={setNoteNotation} onToggleString={(index) => {if(activeStrings.filter(Boolean).length===1&&activeStrings[index])return;setActiveStrings((all)=>all.map((value,current)=>current===index?!value:value))}} onClearCache={() => {clearLearningData();localStorage.removeItem(PRACTICE_PROFILE_KEY);void clearCloudSnapshot().finally(()=>window.location.reload())}} onClose={() => setSettingsOpen(false)}/>} 
     </main>
   )
 }

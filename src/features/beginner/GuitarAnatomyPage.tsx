@@ -27,6 +27,7 @@ const PARTS: GuitarPart[] = [
 ]
 
 const GUITAR_LAYER_IDS = ['q1shadowright', 'q2', 'q3', 'q4', 'q5', 'q6', 'q7', 'q8', 'q9', 'q10topright', 'q11topleft']
+const GUITAR_SVG_HREF = 'assets/acoustic-guitar-reference.svg'
 const PART_ANCHORS:Record<string,[number,number]>={headstock:[276,85],tuners:[302,108],nut:[246,163],neck:[255,300],fretboard:[220,360],frets:[205,375],strings:[188,620],body:[120,700],soundhole:[208,548],bridge:[190,694]}
 const STRING_PATHS=[
   '247.2,84.9 230.1,162.4 169.7,683.8 168.9,695.7','244.3,111 234.4,162.6 175.5,683.9 174.7,697.1','244.6,137.7 240.4,162.8 182.3,685.9 181.9,699.1',
@@ -71,12 +72,12 @@ export function GuitarAnatomyPage({ onNext }: Props) {
               </filter>
             </defs>
             <g className="guitar-reference-base">
-              {GUITAR_LAYER_IDS.map((id) => <use key={id} href={`/assets/acoustic-guitar-reference.svg#${id}`}/>) }
+              {GUITAR_LAYER_IDS.map((id) => <use key={id} href={`${GUITAR_SVG_HREF}#${id}`}/>) }
             </g>
             <g className={`anatomy-exact-highlight highlight-${activePart.id}`} filter="url(#active-part-glow)">
-              {activePart.id==='headstock'&&<use href="/assets/acoustic-guitar-reference.svg#q9"/>}
-              {activePart.id==='neck'&&<use href="/assets/acoustic-guitar-reference.svg#q2"/>}
-              {activePart.id==='body'&&<><use href="/assets/acoustic-guitar-reference.svg#q4"/><use href="/assets/acoustic-guitar-reference.svg#q5"/><ellipse className="body-soundhole-cutout" cx="208" cy="548.5" rx="38.6" ry="48.2"/></>}
+              {activePart.id==='headstock'&&<use href={`${GUITAR_SVG_HREF}#q9`}/>}
+              {activePart.id==='neck'&&<use href={`${GUITAR_SVG_HREF}#q2`}/>}
+              {activePart.id==='body'&&<><use href={`${GUITAR_SVG_HREF}#q4`}/><use href={`${GUITAR_SVG_HREF}#q5`}/><ellipse className="body-soundhole-cutout" cx="208" cy="548.5" rx="38.6" ry="48.2"/></>}
               {activePart.id==='fretboard'&&<polygon points="264.1,163.8 230.9,531 185.3,525.1 227.4,163.6"/>}
               {activePart.id==='nut'&&<line x1="227.5" y1="163" x2="264" y2="163"/>}
               {activePart.id==='soundhole'&&<ellipse cx="208" cy="548.5" rx="38.6" ry="48.2"/>}
